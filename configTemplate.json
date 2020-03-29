@@ -1,0 +1,19 @@
+﻿##rename to config.json and delete this comment 
+##EditableBy 0 is admin only, 1 is mod+admin only, 2 is everyone
+##list server IDs the bot will be active in
+##add crosspost channels where the bot will copy links of images from one channel to another channel
+
+{
+	"Token": "",
+	"Prefix": "!",
+	"EditableBy": "0",
+	"ChannelList": {
+		"serverID": "XXX",
+		"botTestID": "XXX"
+	},
+	"ChannelsCrossPost": {
+		"XXX": "XXX",
+		"XXX": "XXX",
+		"XXX": "XXX"
+	}
+}
