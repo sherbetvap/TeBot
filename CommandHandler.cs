@@ -11,6 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Discord;
+using System.Data.SQLite;
 
 namespace TeBot
 {
@@ -22,25 +23,78 @@ namespace TeBot
         private readonly IConfiguration config;
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
+        private readonly ulong serverID;
         private IEnumerable<IConfigurationSection> channelEnumeration;
         private IEnumerable<IConfigurationSection> crosspostChannelEnumeration;
+        private SQLiteConnection sqlite;
+        private SQLiteDataReader sqlite_datareader;
+        private SQLiteCommand sqlite_cmd;
+        private Dictionary<ulong, ulong> crosspostChannelsDictionary;
 
         // DiscordSocketClient, CommandService, IConfigurationRoot, and IServiceProvider are injected automatically from the IServiceProvider
-        public CommandHandler(DiscordSocketClient discord, CommandService commands, IConfiguration config)
+        public CommandHandler(DiscordSocketClient discord, CommandService commands, IConfiguration config, SQLiteConnection sqlite)
         {
             this.discord = discord;
             this.commands = commands;
-            this.config = config;        
+            this.config = config;
+            this.sqlite = sqlite;
+            crosspostChannelsDictionary = new Dictionary<ulong, ulong>();
 
-            //Get key/value pairs for lists of channels
+            // Get key/value pairs for lists of channels
             channelEnumeration = config.GetSection("ChannelList").GetChildren();
             crosspostChannelEnumeration = config.GetSection("ChannelsCrossPost").GetChildren();
+            InitiateCrosspostChannels();
+            serverID = ParseStringToUlong(config["serverID"]);
 
-            //load modules
+            // Load modules
             commands.AddModulesAsync(Assembly.GetEntryAssembly(), null);
        
-            //Set delegate to go off for every message
+            // Set delegate to go off for every message
             this.discord.MessageReceived += OnMessageReceivedAsync;
+            // Set delegate to go off every delete
+            this.discord.MessageDeleted += OnMessageDeletedAsync;
+        }
+
+        /// <summary>
+        /// On message deleted, check to see if channel is a gallery channel, and check DB to see if ID of message exists.
+        /// </summary>
+        /// <param name="sourceMessage"></param>
+        /// <param name="sourceChannel"></param>
+        /// <returns></returns>
+        private async Task OnMessageDeletedAsync(Cacheable<IMessage, ulong> sourceMessage, ISocketMessageChannel sourceChannel)
+        {
+            sqlite_cmd = sqlite.CreateCommand();
+            sqlite_cmd.CommandText = "SELECT LinkID FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
+            sqlite_datareader = sqlite_cmd.ExecuteReader();
+            ulong readLinkId = 0;
+            if (sqlite_datareader.Read())
+            {
+                readLinkId = (ulong) sqlite_datareader.GetInt64(0);
+            }
+
+            // Get channel posted from
+            // If it matches a crosspost channel then get the value from key
+            // use value to access channel and get the message
+
+            // Link id exists, delete message and remove from DB
+            if (readLinkId != 0)
+            {
+                ulong channelToDeleteFrom = crosspostChannelsDictionary[sourceChannel.Id];
+
+                // LOOK ARIA THE MESSEGE IS DELETED
+                // Hi this is Aria, good job Coffvee!
+                try
+                {
+                    await discord.GetGuild(serverID).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
+                }
+                finally
+                {
+                    // Delete entry from table
+                    sqlite_cmd = sqlite.CreateCommand();
+                    sqlite_cmd.CommandText = "DELETE FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
+                    sqlite_cmd.ExecuteNonQuery();
+                }                
+            }            
         }
 
         /// <summary>
@@ -63,31 +117,31 @@ namespace TeBot
             bool isAdmOnlyAndAdmMsg = config["EditableBy"].Equals(ADMIN_ONLY) && userPerms.Administrator;
             // Check if the message has a valid command prefix, or is mentioned. 
             // Check if allowed by everyone, or if admin only and then make sure user is admin            
-            if ( isCommand && (config["EditableBy"].Equals(EVERYONE)) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg)                      
+            if ( isCommand && (config["EditableBy"].Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg) )                 
             {
                 var result = await commands.ExecuteAsync(context, argPos, null);     // Execute the command
 
                 if (!result.IsSuccess)                              // If not successful, reply with the error.
                     await context.Channel.SendMessageAsync(result.ToString());
             }
-            else //if it is not a command check what channel it is
+            else // If it is not a command check what channel it is
             {
-                //wait to allow any embeds to appear
+                // Wait to allow any embeds to appear
                 Thread.Sleep(5000);                 
                 
-                //for each crosspost key, check if key matches the context channel ID
+                // Check if key matches the context channel ID
                 foreach (var channel in crosspostChannelEnumeration)
                 {        
-                    //parse key string to ulong 
+                    // Parse key string to ulong 
                     ulong channelID = ParseStringToUlong(channel.Key);                    
 
-                    //test to see if key matches context. If it does, get the value. That is the channel to post to.
+                    // Test to see if key matches context. If it does, get the value. That is the channel to post to.
                     if (context.Channel.Id == channelID)
                     {
                         ulong channelTo = ParseStringToUlong(channel.Value);
 
-                        //dont send message if parse failed
-                        if(channelTo != 0)
+                        // Only send message if parse succeeded 
+                        if (channelTo != 0)
                             await LinkImagesToOtherChannel(context, channelTo);
                     }
                 }
@@ -104,29 +158,34 @@ namespace TeBot
         {
             string lastString = "";
 
-            //refresh message to retrieve generated embeds
+            // Refresh message to retrieve generated embeds
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
-            //message must contain a link or file or else it will not be copied
+            // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
                 StringBuilder message = new StringBuilder();
 
-                //display files first then link
+                // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
                 {
                     message.Append(attachment.Url + "\n");
                 }
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    //makes sure it is not geting the same url from last time
+                    // Makes sure it is not geting the same url from last time
                     if (!lastString.Equals(embed.Url))
                         message.Append(embed.Url + "\n");
                     lastString = embed.Url;
                 }
 
-                //send message
-                await context.Guild.GetTextChannel(channelTo).SendMessageAsync(message.ToString());
+                // Send message
+                var sentMessage = await context.Guild.GetTextChannel(channelTo).SendMessageAsync(message.ToString());
+                
+                // Insert into database
+                sqlite_cmd = sqlite.CreateCommand();
+                sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
+                sqlite_cmd.ExecuteNonQuery();
             }
         }
 
@@ -143,6 +202,22 @@ namespace TeBot
             catch (Exception) { Console.WriteLine("Failed to parse" + s); }
 
             return channelID;
-        }        
+        }
+
+        /// <summary>
+        /// Fills dictionary with crossposting channels
+        /// </summary>
+        private void InitiateCrosspostChannels()
+        {
+            foreach (var channel in crosspostChannelEnumeration)
+            {
+                // Parse key string to ulong 
+                ulong channelFrom = ParseStringToUlong(channel.Key);
+
+                ulong channelTo = ParseStringToUlong(channel.Value);
+
+                crosspostChannelsDictionary.Add(channelFrom, channelTo);
+            }
+        }
     }    
 }
