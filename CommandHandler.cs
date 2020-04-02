@@ -83,12 +83,17 @@ namespace TeBot
 
                 // LOOK ARIA THE MESSEGE IS DELETED
                 // Hi this is Aria, good job Coffvee!
-                await discord.GetGuild(serverID).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
-
-                // Delete entry from table
-                sqlite_cmd = sqlite.CreateCommand();
-                sqlite_cmd.CommandText = "DELETE FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
-                sqlite_cmd.ExecuteNonQuery();
+                try
+                {
+                    await discord.GetGuild(serverID).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
+                }
+                finally
+                {
+                    // Delete entry from table
+                    sqlite_cmd = sqlite.CreateCommand();
+                    sqlite_cmd.CommandText = "DELETE FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
+                    sqlite_cmd.ExecuteNonQuery();
+                }                
             }            
         }
 
