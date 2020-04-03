@@ -105,8 +105,16 @@ namespace TeBot
         private async Task OnMessageReceivedAsync(SocketMessage s)
         {
             var msg = s as SocketUserMessage;                       // Ensure the message is from a user/bot
-            if (msg == null) return;
-            if (msg.Author.Id == discord.CurrentUser.Id) return;    // Ignore self when checking commands
+
+            if (msg == null)
+            {
+                return;
+            }
+
+            if (msg.Author.Id == discord.CurrentUser.Id)
+            {
+                return;    // Ignore self when checking commands
+            }
 
             var context = new SocketCommandContext(discord, msg);   // Create the command context
             var userPerms = (context.User as IGuildUser).GuildPermissions;
@@ -120,14 +128,16 @@ namespace TeBot
             if ( isCommand && (config["EditableBy"].Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg) )                 
             {
                 var result = await commands.ExecuteAsync(context, argPos, null);     // Execute the command
-
-                if (!result.IsSuccess)                              // If not successful, reply with the error.
+                // If not successful, reply with the error.
+                if (!result.IsSuccess)
+                {
                     await context.Channel.SendMessageAsync(result.ToString());
+                }
             }
             else // If it is not a command check what channel it is
             {
                 // Wait to allow any embeds to appear
-                Thread.Sleep(5000);                 
+                Thread.Sleep(5000);
                 
                 // Check if key matches the context channel ID
                 foreach (var channel in crosspostChannelEnumeration)
@@ -139,10 +149,11 @@ namespace TeBot
                     if (context.Channel.Id == channelID)
                     {
                         ulong channelTo = ParseStringToUlong(channel.Value);
-
                         // Only send message if parse succeeded 
                         if (channelTo != 0)
+                        {
                             await LinkImagesToOtherChannel(context, channelTo);
+                        }
                     }
                 }
             }
@@ -175,7 +186,9 @@ namespace TeBot
                 {
                     // Makes sure it is not geting the same url from last time
                     if (!lastString.Equals(embed.Url))
+                    {
                         message.Append(embed.Url + "\n");
+                    }
                     lastString = embed.Url;
                 }
 
