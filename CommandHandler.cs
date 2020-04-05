@@ -87,6 +87,17 @@ namespace TeBot
                 {
                     await discord.GetGuild(serverID).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
                 }
+                catch (Discord.Net.HttpException ex)
+                {
+                    if (ex.HttpCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        Console.WriteLine("Message to delete not found, was it deleted already?");
+                    }
+                    else
+                    {
+                        throw ex;
+                    }
+                }
                 finally
                 {
                     // Delete entry from table
@@ -170,19 +181,21 @@ namespace TeBot
             string lastString = "";
 
             // Refresh message to retrieve generated embeds
-            try
+            IMessage refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
+
+            // Null probably if message was deleted before bot could crosspost link
+            if (refreshedMessage == null)
             {
-                var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
-            }
-            catch (NullReferenceException)
-            {   // Message was probably deleted before we could x-post.
-                return null;
+                Console.WriteLine("Refreshed message null when trying to crosspost");
+                return;
             }
 
             // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
                 StringBuilder message = new StringBuilder();
+
+                message.Append("Posted by " + context.User.Username + " ");
 
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
@@ -208,7 +221,7 @@ namespace TeBot
                 sqlite_cmd.ExecuteNonQuery();
             }
 
-            return null;
+            return;
         }
 
         /// <summary>
