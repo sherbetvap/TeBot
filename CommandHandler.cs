@@ -153,13 +153,20 @@ namespace TeBot
         /// </summary>
         /// <param name="context"></param>
         /// <param name="channelTo"></param>
-        /// <returns></returns>
+        /// <returns>null</returns>
         private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelTo)
         {
             string lastString = "";
 
             // Refresh message to retrieve generated embeds
-            var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
+            try
+            {
+                var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
+            }
+            catch (NullReferenceException)
+            {   // Message was probably deleted before we could x-post.
+                return null;
+            }
 
             // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
@@ -187,6 +194,8 @@ namespace TeBot
                 sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
                 sqlite_cmd.ExecuteNonQuery();
             }
+
+            return null;
         }
 
         /// <summary>
