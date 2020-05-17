@@ -53,6 +53,23 @@ namespace TeBot
             this.discord.MessageReceived += OnMessageReceivedAsync;
             // Set delegate to go off every delete
             this.discord.MessageDeleted += OnMessageDeletedAsync;
+            // Set delegate to go off when someone leaves server
+            this.discord.UserLeft += OnUserLeftAsync;
+        }
+
+        /// <summary>
+        /// Sends a messgae in a channel when a user leaves the server.
+        /// </summary>
+        /// <param name="User"></param>
+        /// <returns></returns>
+        private async Task OnUserLeftAsync(SocketGuildUser User)
+        {
+            string modChannelString = channelEnumeration.FirstOrDefault(x => x.Key == "modChannelID")?.Value;
+            if (modChannelString != null)
+            {
+                ulong modChannel = ParseStringToUlong(modChannelString);
+                await User.Guild.GetTextChannel(modChannel).SendMessageAsync(User.Username + "#" + User.DiscriminatorValue + " has left.");
+            }
         }
 
         /// <summary>
