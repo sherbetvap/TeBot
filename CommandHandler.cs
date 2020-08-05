@@ -11,7 +11,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Discord;
-using System.Data.SQLite;
 
 namespace TeBot
 {
@@ -26,18 +25,16 @@ namespace TeBot
         private readonly ulong serverID;
         private IEnumerable<IConfigurationSection> channelEnumeration;
         private IEnumerable<IConfigurationSection> crosspostChannelEnumeration;
-        private SQLiteConnection sqlite;
-        private SQLiteDataReader sqlite_datareader;
-        private SQLiteCommand sqlite_cmd;
         private Dictionary<ulong, ulong> crosspostChannelsDictionary;
+        private SQLManager sQLManager;
 
         // DiscordSocketClient, CommandService, IConfigurationRoot, and IServiceProvider are injected automatically from the IServiceProvider
-        public CommandHandler(DiscordSocketClient discord, CommandService commands, IConfiguration config, SQLiteConnection sqlite)
+        public CommandHandler(DiscordSocketClient discord, CommandService commands, IConfiguration config, SQLManager sQLManager)
         {
             this.discord = discord;
             this.commands = commands;
             this.config = config;
-            this.sqlite = sqlite;
+            this.sQLManager = sQLManager;
             crosspostChannelsDictionary = new Dictionary<ulong, ulong>();
 
             // Get key/value pairs for lists of channels
@@ -48,7 +45,7 @@ namespace TeBot
 
             // Load modules
             commands.AddModulesAsync(Assembly.GetEntryAssembly(), null);
-       
+
             // Set delegate to go off for every message
             this.discord.MessageReceived += OnMessageReceivedAsync;
             // Set delegate to go off every delete
@@ -80,18 +77,7 @@ namespace TeBot
         /// <returns></returns>
         private async Task OnMessageDeletedAsync(Cacheable<IMessage, ulong> sourceMessage, ISocketMessageChannel sourceChannel)
         {
-            sqlite_cmd = sqlite.CreateCommand();
-            sqlite_cmd.CommandText = "SELECT LinkID FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
-            sqlite_datareader = sqlite_cmd.ExecuteReader();
-            ulong readLinkId = 0;
-            if (sqlite_datareader.Read())
-            {
-                readLinkId = (ulong) sqlite_datareader.GetInt64(0);
-            }
-
-            // Get channel posted from
-            // If it matches a crosspost channel then get the value from key
-            // use value to access channel and get the message
+            ulong readLinkId = sQLManager.CheckMatch(sourceMessage.Id);
 
             // Link id exists, delete message and remove from DB
             if (readLinkId != 0)
@@ -102,6 +88,7 @@ namespace TeBot
                 // Hi this is Aria, good job Coffvee!
                 try
                 {
+                    // Try to delete linked message
                     await discord.GetGuild(serverID).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
                 }
                 catch (Discord.Net.HttpException ex)
@@ -117,12 +104,10 @@ namespace TeBot
                 }
                 finally
                 {
-                    // Delete entry from table
-                    sqlite_cmd = sqlite.CreateCommand();
-                    sqlite_cmd.CommandText = "DELETE FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
-                    sqlite_cmd.ExecuteNonQuery();
-                }                
-            }            
+                    // Clean up db, delete entry for deleted message
+                    sQLManager.DeleteFromTable(sourceMessage.Id);
+                }
+            }
         }
 
         /// <summary>
@@ -153,7 +138,7 @@ namespace TeBot
             bool isAdmOnlyAndAdmMsg = config["EditableBy"].Equals(ADMIN_ONLY) && userPerms.Administrator;
             // Check if the message has a valid command prefix, or is mentioned. 
             // Check if allowed by everyone, or if admin only and then make sure user is admin            
-            if ( isCommand && (config["EditableBy"].Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg) )                 
+            if (isCommand && (config["EditableBy"].Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg))
             {
                 var result = await commands.ExecuteAsync(context, argPos, null);     // Execute the command
                 // If not successful, reply with the error.
@@ -166,12 +151,12 @@ namespace TeBot
             {
                 // Wait to allow any embeds to appear
                 Thread.Sleep(5000);
-                
+
                 // Check if key matches the context channel ID
                 foreach (var channel in crosspostChannelEnumeration)
-                {        
+                {
                     // Parse key string to ulong 
-                    ulong channelID = ParseStringToUlong(channel.Key);                    
+                    ulong channelID = ParseStringToUlong(channel.Key);
 
                     // Test to see if key matches context. If it does, get the value. That is the channel to post to.
                     if (context.Channel.Id == channelID)
@@ -231,11 +216,9 @@ namespace TeBot
 
                 // Send message
                 var sentMessage = await context.Guild.GetTextChannel(channelTo).SendMessageAsync(message.ToString());
-                
+
                 // Insert into database
-                sqlite_cmd = sqlite.CreateCommand();
-                sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
-                sqlite_cmd.ExecuteNonQuery();
+                sQLManager.InsertToTable(context.Message.Id, sentMessage.Id);
             }
 
             return;
@@ -271,5 +254,5 @@ namespace TeBot
                 crosspostChannelsDictionary.Add(channelFrom, channelTo);
             }
         }
-    }    
+    }
 }
