@@ -128,23 +128,13 @@ namespace TeBot
             else // If it is not a command check what channel it is
             {
                 // Wait to allow any embeds to appear
-                Thread.Sleep(5000);                 
-                
+                Thread.Sleep(5000);
+
                 // Check if key matches the context channel ID
-                foreach (var channel in crosspostChannelEnumeration)
-                {        
-                    // Parse key string to ulong 
-                    ulong channelID = ParseStringToUlong(channel.Key);                    
-
-                    // Test to see if key matches context. If it does, get the value. That is the channel to post to.
-                    if (context.Channel.Id == channelID)
-                    {
-                        ulong channelTo = ParseStringToUlong(channel.Value);
-
-                        // Only send message if parse succeeded 
-                        if (channelTo != 0)
-                            await LinkImagesToOtherChannel(context, channelTo);
-                    }
+                var crosspostChannelEntry = crosspostChannelsDictionary[context.Channel.Id];
+                if (channel != null)
+                {
+                    await LinkImagesToOtherChannel(context, crosspostChannelEntry.Value);
                 }
             }
         }
