@@ -20,6 +20,7 @@ namespace TeBot
         private const string ADMIN_ONLY = "0";
         private const string MOD_ONLY = "1";
         private const string EVERYONE = "2";
+        private const string TWITTER_URL = "https://twitter.com/";
         private readonly IConfiguration config;
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
@@ -156,8 +157,6 @@ namespace TeBot
         /// <returns></returns>
         private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelTo)
         {
-            string lastString = "";
-
             // Refresh message to retrieve generated embeds
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
@@ -171,12 +170,15 @@ namespace TeBot
                 {
                     message.Append(attachment.Url + "\n");
                 }
+
+                HashSet<string> appendedUrls = new HashSet<string>();
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    // Makes sure it is not geting the same url from last time
-                    if (!lastString.Equals(embed.Url))
-                        message.Append(embed.Url + "\n");
-                    lastString = embed.Url;
+                    string urlToAppend = IsTwitterUrl(embed.Url) ? RemoveTwitterContext(embed.Url) : embed.Url;
+
+                    // Makes sure it is not appending a url already appended
+                    if (appendedUrls.Add(urlToAppend))
+                        message.Append(urlToAppend + "\n");
                 }
 
                 // Send message
@@ -187,6 +189,17 @@ namespace TeBot
                 sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
                 sqlite_cmd.ExecuteNonQuery();
             }
+        }
+
+        private bool IsTwitterUrl(string url)
+        {
+            return url.StartsWith(TWITTER_URL);
+        }
+
+        private string RemoveTwitterContext(string url)
+        {
+            int contextIndex = url.IndexOf('?');
+            return contextIndex == -1 ? url : link.Substring(0, contextIndex);
         }
 
         /// <summary>
