@@ -179,13 +179,19 @@ namespace TeBot
                     lastString = embed.Url;
                 }
 
-                // Send message
-                var sentMessage = await context.Guild.GetTextChannel(channelTo).SendMessageAsync(message.ToString());
-                
-                // Insert into database
-                sqlite_cmd = sqlite.CreateCommand();
-                sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
-                sqlite_cmd.ExecuteNonQuery();
+                IUserMessage sentMessage = null;
+                try
+                {
+                    // Send message
+                    sentMessage = await context.Guild.GetTextChannel(channelTo).SendMessageAsync(message.ToString());
+                }
+                finally
+                {
+                    // Insert into database
+                    sqlite_cmd = sqlite.CreateCommand();
+                    sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
+                    sqlite_cmd.ExecuteNonQuery();
+                }
             }
         }
 
