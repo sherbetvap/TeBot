@@ -14,20 +14,16 @@ namespace TeBot
 {
     public class CommandHandler
     {
-        private const string ADMIN_ONLY = "0";
-        private const string MOD_ONLY = "1";
-        private const string EVERYONE = "2";
+        private const string ADMIN_ONLY = "0", MOD_ONLY = "1", EVERYONE = "2";
 
-        private const string TWITTER_URL = "https://twitter.com/";
+        private const string TWITTER_URL = "https://twitter.com/", TWXTTER_URL = "https://twxtter.com/";
         private const char TWITTER_CONTEXT_SYMBOL = '?';
-        private const int I_INDEX_IN_TWITTER_URL = 10;
 
+        private const string CROSSPOST_INSERT_0 = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (", CROSSPOST_INSERT_1 = ",", CROSSPOST_INSERT_2 = ")";
         private const string CROSSPOST_SELECT = "SELECT LinkID FROM SourceLinkIDPairs WHERE SourceID = ";
-        private const string CROSSPOST_INSERT = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (";
         private const string CROSSPOST_DELETE = "DELETE FROM SourceLinkIDPairs WHERE SourceID = ";
 
-        private const int CROSSPOST_WAIT_MS = 5000;
-        private const int TWXTTER_WAIT_MS = 2000;
+        private const int CROSSPOST_WAIT_MS = 5000, TWXTTER_WAIT_MS = 2000;
 
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
@@ -122,15 +118,11 @@ namespace TeBot
             // Create the command context
             var context = new SocketCommandContext(discord, msg);
             var userPerms = (context.User as IGuildUser).GuildPermissions;
-
             int argPos = 0;
-            bool isCommand = msg.HasStringPrefix(commandPrefix, ref argPos) || msg.HasMentionPrefix(discord.CurrentUser, ref argPos);
-            bool isModOnlyAndModMsg = editableBy.Equals(MOD_ONLY) && (userPerms.ManageChannels || userPerms.Administrator);
-            bool isAdmOnlyAndAdmMsg = editableBy.Equals(ADMIN_ONLY) && userPerms.Administrator;
 
             // Check if the message has a valid command prefix, or is mentioned. 
             // Check if allowed by everyone, or if admin only and then make sure user is admin            
-            if (isCommand && (editableBy.Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg))
+            if (isCommand(msg, ref argPos) && (isEverybody() || isModOnlyAndModMsg(userPerms) || isAdmOnlyAndAdmMsg(userPerms)))
             {
                 // Execute the command
                 var result = await commands.ExecuteAsync(context, argPos, null);
@@ -156,6 +148,26 @@ namespace TeBot
                     await SendTwxtterUrlsIfNeeded(context);
                 }
             }
+        }
+
+        private bool isCommand(SocketUserMessage msg, ref int argPos)
+        {
+            return msg.HasStringPrefix(commandPrefix, ref argPos) || msg.HasMentionPrefix(discord.CurrentUser, ref argPos);
+        }
+
+        private bool isEverybody()
+        {
+            return editableBy.Equals(EVERYONE);
+        }
+
+        private bool isModOnlyAndModMsg(GuildPermissions userPerms)
+        {
+            return editableBy.Equals(MOD_ONLY) && (userPerms.ManageChannels || userPerms.Administrator);
+        }
+
+        private bool isAdmOnlyAndAdmMsg(GuildPermissions userPerms)
+        {
+            return editableBy.Equals(ADMIN_ONLY) && userPerms.Administrator;
         }
 
         private async Task SendTwxtterUrlsIfNeeded(SocketCommandContext context)
@@ -230,7 +242,7 @@ namespace TeBot
                 {
                     // Insert into database
                     sqlite_cmd = sqlite.CreateCommand();
-                    sqlite_cmd.CommandText = CROSSPOST_INSERT + context.Message.Id + ", " + sentMessage.Id + ")";
+                    sqlite_cmd.CommandText = CROSSPOST_INSERT_0 + context.Message.Id + CROSSPOST_INSERT_1 + sentMessage.Id + CROSSPOST_INSERT_2;
                     sqlite_cmd.ExecuteNonQuery();
                 }
             }
@@ -238,12 +250,12 @@ namespace TeBot
 
         private string FormatTwitterUrl(string twitterUrl, bool isVideo)
         {
-            StringBuilder b = new StringBuilder(RemoveTwitterContext(twitterUrl));
+            String formattedUrl = RemoveTwitterContext(twitterUrl);
             if (isVideo)
             {
-                b[I_INDEX_IN_TWITTER_URL] = 'x';
+                formattedUrl = TWXTTER_URL + formattedUrl.Substring(TWITTER_URL.Length);
             }
-            return b.ToString();
+            return formattedUrl;
         }
 
         private bool IsTwitterUrl(string url)
