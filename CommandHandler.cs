@@ -22,14 +22,19 @@ namespace TeBot
         private const char TWITTER_CONTEXT_SYMBOL = '?';
         private const int I_INDEX_IN_TWITTER_URL = 10;
 
+        private const string CROSSPOST_SELECT = "SELECT LinkID FROM SourceLinkIDPairs WHERE SourceID = ";
+        private const string CROSSPOST_INSERT = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (";
+        private const string CROSSPOST_DELETE = "DELETE FROM SourceLinkIDPairs WHERE SourceID = ";
+
         private const int CROSSPOST_WAIT_MS = 5000;
         private const int TWXTTER_WAIT_MS = 2000;
 
-        private readonly IConfiguration config;
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
-        private readonly ulong serverID;
         private readonly Dictionary<ulong, ulong> crosspostChannelsDictionary;
+        private readonly ulong serverID;
+        private readonly string commandPrefix;
+        private readonly string editableBy;
 
         private SQLiteConnection sqlite;
         private SQLiteDataReader sqlite_datareader;
@@ -40,12 +45,13 @@ namespace TeBot
         {
             this.discord = discord;
             this.commands = commands;
-            this.config = config;
             this.sqlite = sqlite;
 
             // Get key/value pairs for lists of channels
             this.crosspostChannelsDictionary = CreateCrosspostChannelDictionary(config.GetSection("ChannelsCrossPost").GetChildren());
             this.serverID = ParseStringToUlong(config["serverID"]);
+            this.commandPrefix = config["Prefix"];
+            this.editableBy = config["EditableBy"];
 
             // Load modules
             commands.AddModulesAsync(Assembly.GetEntryAssembly(), null);
@@ -65,7 +71,7 @@ namespace TeBot
         private async Task OnMessageDeletedAsync(Cacheable<IMessage, ulong> sourceMessage, ISocketMessageChannel sourceChannel)
         {
             sqlite_cmd = sqlite.CreateCommand();
-            sqlite_cmd.CommandText = "SELECT LinkID FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
+            sqlite_cmd.CommandText = CROSSPOST_SELECT + sourceMessage.Id;
             sqlite_datareader = sqlite_cmd.ExecuteReader();
             ulong readLinkId = 0;
             if (sqlite_datareader.Read())
@@ -93,7 +99,7 @@ namespace TeBot
                 {
                     // Delete entry from table
                     sqlite_cmd = sqlite.CreateCommand();
-                    sqlite_cmd.CommandText = "DELETE FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
+                    sqlite_cmd.CommandText = CROSSPOST_DELETE + sourceMessage.Id;
                     sqlite_cmd.ExecuteNonQuery();
                 }
             }
@@ -118,13 +124,13 @@ namespace TeBot
             var userPerms = (context.User as IGuildUser).GuildPermissions;
 
             int argPos = 0;
-            bool isCommand = msg.HasStringPrefix(config["Prefix"], ref argPos) || msg.HasMentionPrefix(discord.CurrentUser, ref argPos);
-            bool isModOnlyAndModMsg = config["EditableBy"].Equals(MOD_ONLY) && (userPerms.ManageChannels || userPerms.Administrator);
-            bool isAdmOnlyAndAdmMsg = config["EditableBy"].Equals(ADMIN_ONLY) && userPerms.Administrator;
+            bool isCommand = msg.HasStringPrefix(commandPrefix, ref argPos) || msg.HasMentionPrefix(discord.CurrentUser, ref argPos);
+            bool isModOnlyAndModMsg = editableBy.Equals(MOD_ONLY) && (userPerms.ManageChannels || userPerms.Administrator);
+            bool isAdmOnlyAndAdmMsg = editableBy.Equals(ADMIN_ONLY) && userPerms.Administrator;
 
             // Check if the message has a valid command prefix, or is mentioned. 
             // Check if allowed by everyone, or if admin only and then make sure user is admin            
-            if (isCommand && (config["EditableBy"].Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg))
+            if (isCommand && (editableBy.Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg))
             {
                 // Execute the command
                 var result = await commands.ExecuteAsync(context, argPos, null);
@@ -224,7 +230,7 @@ namespace TeBot
                 {
                     // Insert into database
                     sqlite_cmd = sqlite.CreateCommand();
-                    sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
+                    sqlite_cmd.CommandText = CROSSPOST_INSERT + context.Message.Id + ", " + sentMessage.Id + ")";
                     sqlite_cmd.ExecuteNonQuery();
                 }
             }
