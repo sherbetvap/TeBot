@@ -1,17 +1,14 @@
-﻿using Discord.Commands;
+﻿using Discord;
+using Discord.Commands;
 using Discord.WebSocket;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Data.SQLite;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Reflection;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.Json;
-using Microsoft.Extensions.DependencyInjection;
-using Discord;
-using System.Data.SQLite;
 
 namespace TeBot
 {
@@ -24,7 +21,7 @@ namespace TeBot
         private const string TWITTER_URL = "https://twitter.com/";
         private const char TWITTER_CONTEXT_SYMBOL = '?';
         private const int I_INDEX_IN_TWITTER_URL = 10;
-        
+
         private const int CROSSPOST_WAIT_MS = 5000;
         private const int TWXTTER_WAIT_MS = 2000;
 
@@ -32,12 +29,11 @@ namespace TeBot
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
         private readonly ulong serverID;
-        private IEnumerable<IConfigurationSection> channelEnumeration;
-        private IEnumerable<IConfigurationSection> crosspostChannelEnumeration;
+        private readonly Dictionary<ulong, ulong> crosspostChannelsDictionary;
+
         private SQLiteConnection sqlite;
         private SQLiteDataReader sqlite_datareader;
         private SQLiteCommand sqlite_cmd;
-        private Dictionary<ulong, ulong> crosspostChannelsDictionary;
 
         // DiscordSocketClient, CommandService, IConfigurationRoot, and IServiceProvider are injected automatically from the IServiceProvider
         public CommandHandler(DiscordSocketClient discord, CommandService commands, IConfiguration config, SQLiteConnection sqlite)
@@ -46,17 +42,14 @@ namespace TeBot
             this.commands = commands;
             this.config = config;
             this.sqlite = sqlite;
-            crosspostChannelsDictionary = new Dictionary<ulong, ulong>();
 
             // Get key/value pairs for lists of channels
-            channelEnumeration = config.GetSection("ChannelList").GetChildren();
-            crosspostChannelEnumeration = config.GetSection("ChannelsCrossPost").GetChildren();
-            InitiateCrosspostChannels();
-            serverID = ParseStringToUlong(config["serverID"]);
+            this.crosspostChannelsDictionary = CreateCrosspostChannelDictionary(config.GetSection("ChannelsCrossPost").GetChildren());
+            this.serverID = ParseStringToUlong(config["serverID"]);
 
             // Load modules
             commands.AddModulesAsync(Assembly.GetEntryAssembly(), null);
-       
+
             // Set delegate to go off for every message
             this.discord.MessageReceived += OnMessageReceivedAsync;
             // Set delegate to go off every delete
@@ -102,8 +95,8 @@ namespace TeBot
                     sqlite_cmd = sqlite.CreateCommand();
                     sqlite_cmd.CommandText = "DELETE FROM SourceLinkIDPairs WHERE SourceID = " + sourceMessage.Id + ";";
                     sqlite_cmd.ExecuteNonQuery();
-                }                
-            }            
+                }
+            }
         }
 
         /// <summary>
@@ -113,35 +106,41 @@ namespace TeBot
         /// <returns></returns>
         private async Task OnMessageReceivedAsync(SocketMessage s)
         {
-            var msg = s as SocketUserMessage;                       // Ensure the message is from a user/bot
+            var msg = s as SocketUserMessage;
+            // Ensure the message is from a user/bot
             if (msg == null) return;
-            if (msg.Author.Id == discord.CurrentUser.Id) return;    // Ignore self when checking commands
 
-            var context = new SocketCommandContext(discord, msg);   // Create the command context
+            // Ignore self when checking commands
+            if (msg.Author.Id == discord.CurrentUser.Id) return;
+
+            // Create the command context
+            var context = new SocketCommandContext(discord, msg);
             var userPerms = (context.User as IGuildUser).GuildPermissions;
 
             int argPos = 0;
             bool isCommand = msg.HasStringPrefix(config["Prefix"], ref argPos) || msg.HasMentionPrefix(discord.CurrentUser, ref argPos);
             bool isModOnlyAndModMsg = config["EditableBy"].Equals(MOD_ONLY) && (userPerms.ManageChannels || userPerms.Administrator);
             bool isAdmOnlyAndAdmMsg = config["EditableBy"].Equals(ADMIN_ONLY) && userPerms.Administrator;
+
             // Check if the message has a valid command prefix, or is mentioned. 
             // Check if allowed by everyone, or if admin only and then make sure user is admin            
-            if ( isCommand && (config["EditableBy"].Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg) )                 
+            if (isCommand && (config["EditableBy"].Equals(EVERYONE) || isModOnlyAndModMsg || isAdmOnlyAndAdmMsg))
             {
-                var result = await commands.ExecuteAsync(context, argPos, null);     // Execute the command
+                // Execute the command
+                var result = await commands.ExecuteAsync(context, argPos, null);
 
-                if (!result.IsSuccess)                              // If not successful, reply with the error.
+                // If not successful, reply with the error.
+                if (!result.IsSuccess)
                     await context.Channel.SendMessageAsync(result.ToString());
             }
             else // If it is not a command check what channel it is
             {
                 // Check if key matches the context channel ID
-                var crosspostChannelEntry = crosspostChannelsDictionary[context.Channel.Id];
-                if (channel != null)
+                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
                 {
                     // Wait to allow any embeds to appear
                     Thread.Sleep(CROSSPOST_WAIT_MS);
-                    await LinkImagesToOtherChannel(context, crosspostChannelEntry.Value);
+                    await LinkImagesToOtherChannel(context, channelToPostTo);
                 }
                 // We probably only want to include bot Twxtter posts on channels people aren't posting their created art
                 else
@@ -159,7 +158,7 @@ namespace TeBot
 
             HashSet<string> appendedUrls = new HashSet<string>();
             bool containsTwitterVideo = false;
-            
+
             StringBuilder message = new StringBuilder();
             foreach (var embed in refreshedMessage.Embeds)
             {
@@ -189,7 +188,7 @@ namespace TeBot
         /// <param name="context"></param>
         /// <param name="channelTo"></param>
         /// <returns></returns>
-        private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelTo)
+        private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelToPostTo)
         {
             // Refresh message to retrieve generated embeds
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
@@ -219,7 +218,7 @@ namespace TeBot
                 try
                 {
                     // Send message
-                    sentMessage = await context.Guild.GetTextChannel(channelTo).SendMessageAsync(message.ToString());
+                    sentMessage = await context.Guild.GetTextChannel(channelToPostTo).SendMessageAsync(message.ToString());
                 }
                 finally
                 {
@@ -235,7 +234,7 @@ namespace TeBot
         {
             StringBuilder b = new StringBuilder(RemoveTwitterContext(twitterUrl));
             if (isVideo)
-            { 
+            {
                 b[I_INDEX_IN_TWITTER_URL] = 'x';
             }
             return b.ToString();
@@ -249,7 +248,7 @@ namespace TeBot
         private string RemoveTwitterContext(string url)
         {
             int contextIndex = url.IndexOf(TWITTER_CONTEXT_SYMBOL);
-            return contextIndex == -1 ? url : link.Substring(0, contextIndex);
+            return contextIndex == -1 ? url : url.Substring(0, contextIndex);
         }
 
         /// <summary>
@@ -261,8 +260,14 @@ namespace TeBot
         {
             ulong channelID = 0;
 
-            try { channelID = Convert.ToUInt64(s); }
-            catch (Exception) { Console.WriteLine("Failed to parse" + s); }
+            try
+            {
+                channelID = Convert.ToUInt64(s);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Failed to parse" + s);
+            }
 
             return channelID;
         }
@@ -270,17 +275,17 @@ namespace TeBot
         /// <summary>
         /// Fills dictionary with crossposting channels
         /// </summary>
-        private void InitiateCrosspostChannels()
+        private Dictionary<ulong, ulong> CreateCrosspostChannelDictionary(IEnumerable<IConfigurationSection> crosspostChannelEnumeration)
         {
+            Dictionary<ulong, ulong> tempCrosspostChannelDictionary = new Dictionary<ulong, ulong>();
             foreach (var channel in crosspostChannelEnumeration)
             {
                 // Parse key string to ulong 
                 ulong channelFrom = ParseStringToUlong(channel.Key);
-
                 ulong channelTo = ParseStringToUlong(channel.Value);
-
-                crosspostChannelsDictionary.Add(channelFrom, channelTo);
+                tempCrosspostChannelDictionary.Add(channelFrom, channelTo);
             }
+            return tempCrosspostChannelDictionary;
         }
-    }    
+    }
 }
