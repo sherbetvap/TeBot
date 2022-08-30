@@ -20,6 +20,14 @@ namespace TeBot
         private const string ADMIN_ONLY = "0";
         private const string MOD_ONLY = "1";
         private const string EVERYONE = "2";
+
+        private const string TWITTER_URL = "https://twitter.com/";
+        private const char TWITTER_CONTEXT_SYMBOL = '?';
+        private const int I_INDEX_IN_TWITTER_URL = 10;
+        
+        private const int CROSSPOST_WAIT_MS = 5000;
+        private const int TWXTTER_WAIT_MS = 2000;
+
         private readonly IConfiguration config;
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
@@ -83,6 +91,7 @@ namespace TeBot
 
                 // LOOK ARIA THE MESSEGE IS DELETED
                 // Hi this is Aria, good job Coffvee!
+                // P.S., you misspelled "message"
                 try
                 {
                     await discord.GetGuild(serverID).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
@@ -126,25 +135,51 @@ namespace TeBot
             }
             else // If it is not a command check what channel it is
             {
-                // Wait to allow any embeds to appear
-                Thread.Sleep(5000);                 
-                
                 // Check if key matches the context channel ID
-                foreach (var channel in crosspostChannelEnumeration)
-                {        
-                    // Parse key string to ulong 
-                    ulong channelID = ParseStringToUlong(channel.Key);                    
-
-                    // Test to see if key matches context. If it does, get the value. That is the channel to post to.
-                    if (context.Channel.Id == channelID)
-                    {
-                        ulong channelTo = ParseStringToUlong(channel.Value);
-
-                        // Only send message if parse succeeded 
-                        if (channelTo != 0)
-                            await LinkImagesToOtherChannel(context, channelTo);
-                    }
+                var crosspostChannelEntry = crosspostChannelsDictionary[context.Channel.Id];
+                if (channel != null)
+                {
+                    // Wait to allow any embeds to appear
+                    Thread.Sleep(CROSSPOST_WAIT_MS);
+                    await LinkImagesToOtherChannel(context, crosspostChannelEntry.Value);
                 }
+                // We probably only want to include bot Twxtter posts on channels people aren't posting their created art
+                else
+                {
+                    // Wait to allow any embeds to appear
+                    Thread.Sleep(TWXTTER_WAIT_MS);
+                    await SendTwxtterUrlsIfNeeded(context);
+                }
+            }
+        }
+
+        private async Task SendTwxtterUrlsIfNeeded(SocketCommandContext context)
+        {
+            var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
+
+            HashSet<string> appendedUrls = new HashSet<string>();
+            bool containsTwitterVideo = false;
+            
+            StringBuilder message = new StringBuilder();
+            foreach (var embed in refreshedMessage.Embeds)
+            {
+                bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
+                containsTwitterVideo |= isTwitterVideo;
+
+                if (isTwitterVideo)
+                {
+                    string urlToAppend = FormatTwitterUrl(embed.Url, true);
+
+                    // Prevents duplicate urls from being appended multiple times
+                    if (appendedUrls.Add(urlToAppend))
+                        message.Append(urlToAppend + "\n");
+                }
+            }
+
+            if (containsTwitterVideo)
+            {
+                // TODO: remove embeds from original message if possible
+                await context.Channel.SendMessageAsync(message.ToString());
             }
         }
 
@@ -156,8 +191,6 @@ namespace TeBot
         /// <returns></returns>
         private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelTo)
         {
-            string lastString = "";
-
             // Refresh message to retrieve generated embeds
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
@@ -171,12 +204,15 @@ namespace TeBot
                 {
                     message.Append(attachment.Url + "\n");
                 }
+
+                HashSet<string> appendedUrls = new HashSet<string>();
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    // Makes sure it is not geting the same url from last time
-                    if (!lastString.Equals(embed.Url))
-                        message.Append(embed.Url + "\n");
-                    lastString = embed.Url;
+                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url, embed.Video != null) : embed.Url;
+
+                    // Prevents duplicate urls from being appended multiple times
+                    if (appendedUrls.Add(urlToAppend))
+                        message.Append(urlToAppend + "\n");
                 }
 
                 // Send message
@@ -187,6 +223,27 @@ namespace TeBot
                 sqlite_cmd.CommandText = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (" + context.Message.Id + ", " + sentMessage.Id + ");";
                 sqlite_cmd.ExecuteNonQuery();
             }
+        }
+
+        private string FormatTwitterUrl(string twitterUrl, bool isVideo)
+        {
+            StringBuilder b = new StringBuilder(RemoveTwitterContext(twitterUrl));
+            if (isVideo)
+            { 
+                b[I_INDEX_IN_TWITTER_URL] = 'x';
+            }
+            return b.ToString();
+        }
+
+        private bool IsTwitterUrl(string url)
+        {
+            return url.StartsWith(TWITTER_URL);
+        }
+
+        private string RemoveTwitterContext(string url)
+        {
+            int contextIndex = url.IndexOf(TWITTER_CONTEXT_SYMBOL);
+            return contextIndex == -1 ? url : link.Substring(0, contextIndex);
         }
 
         /// <summary>
