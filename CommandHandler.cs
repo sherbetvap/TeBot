@@ -16,8 +16,8 @@ namespace TeBot
     {
         private const string ADMIN_ONLY = "0", MOD_ONLY = "1", EVERYONE = "2";
 
-        private const string TWITTER_URL = "https://twitter.com/", TWXTTER_URL = "https://twxtter.com/";
-        private const char TWITTER_CONTEXT_SYMBOL = '?';
+        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/";
+        private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
 
         private const string CROSSPOST_INSERT_0 = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (", CROSSPOST_INSERT_1 = ",", CROSSPOST_INSERT_2 = ")";
         private const string CROSSPOST_SELECT = "SELECT LinkID FROM SourceLinkIDPairs WHERE SourceID = ";
@@ -174,7 +174,7 @@ namespace TeBot
         {
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
-            HashSet<string> appendedUrls = new HashSet<string>();
+            HashSet<string> appendedEmbedUrls = new HashSet<string>();
             bool containsTwitterVideo = false;
 
             StringBuilder message = new StringBuilder();
@@ -185,10 +185,10 @@ namespace TeBot
 
                 if (isTwitterVideo)
                 {
-                    string urlToAppend = FormatTwitterUrl(embed.Url, true);
+                    string urlToAppend = FormatTwitterUrl(embed.Url);
 
                     // Prevents duplicate urls from being appended multiple times
-                    if (appendedUrls.Add(urlToAppend))
+                    if (appendedEmbedUrls.Add(urlToAppend))
                         message.Append(urlToAppend + "\n");
                 }
             }
@@ -222,13 +222,13 @@ namespace TeBot
                     message.Append(attachment.Url + "\n");
                 }
 
-                HashSet<string> appendedUrls = new HashSet<string>();
+                HashSet<string> appendedEmbedUrls = new HashSet<string>();
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url, embed.Video != null) : embed.Url;
+                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url) : embed.Url;
 
                     // Prevents duplicate urls from being appended multiple times
-                    if (appendedUrls.Add(urlToAppend))
+                    if (appendedEmbedUrls.Add(urlToAppend))
                         message.Append(urlToAppend + "\n");
                 }
 
@@ -248,14 +248,9 @@ namespace TeBot
             }
         }
 
-        private string FormatTwitterUrl(string twitterUrl, bool isVideo)
+        private string FormatTwitterUrl(string twitterUrl)
         {
-            String formattedUrl = RemoveTwitterContext(twitterUrl);
-            if (isVideo)
-            {
-                formattedUrl = TWXTTER_URL + formattedUrl.Substring(TWITTER_URL.Length);
-            }
-            return formattedUrl;
+            return FXTWITTER_URL + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length);
         }
 
         private bool IsTwitterUrl(string url)
@@ -263,9 +258,9 @@ namespace TeBot
             return url.StartsWith(TWITTER_URL);
         }
 
-        private string RemoveTwitterContext(string url)
+        private string RemoveTwitterTrackingInfo(string url)
         {
-            int contextIndex = url.IndexOf(TWITTER_CONTEXT_SYMBOL);
+            int contextIndex = url.IndexOf(TWITTER_TRACKING_INFO_SYMBOL);
             return contextIndex == -1 ? url : url.Substring(0, contextIndex);
         }
 
