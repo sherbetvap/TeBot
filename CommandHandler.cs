@@ -16,6 +16,7 @@ namespace TeBot
     {
         private const string ADMIN_ONLY = "0", MOD_ONLY = "1", EVERYONE = "2";
 
+        private const string POSTED_BY = "Posted by ";
         private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", ENGLISH_ISO_CODE_SUFFIX = "/en";
         private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
 
@@ -177,7 +178,7 @@ namespace TeBot
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
             bool containsTwitterVideo = false;
 
-            StringBuilder message = new StringBuilder();
+            StringBuilder message = new StringBuilder().Append(POSTED_BY + refreshedMessage.Author.Username + "\n");
             foreach (var embed in refreshedMessage.Embeds)
             {
                 bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
@@ -214,7 +215,7 @@ namespace TeBot
             // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
-                StringBuilder message = new StringBuilder();
+                StringBuilder message = new StringBuilder().Append(POSTED_BY + refreshedMessage.Author.Username + "\n");
 
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
