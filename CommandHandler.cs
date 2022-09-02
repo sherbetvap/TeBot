@@ -16,15 +16,16 @@ namespace TeBot
     {
         private const string ADMIN_ONLY = "0", MOD_ONLY = "1", EVERYONE = "2";
 
-        private const string POSTED_BY = "Posted by ";
-        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", ENGLISH_ISO_CODE_SUFFIX = "/en";
+        private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
+        private const string OTHER_HEADER_0 = "Video from ", OTHER_HEADER_1 = "'s Twitter link:";
+        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", DFXTWITTER_URL = "https://d.fxtwitter.com/";
         private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
 
         private const string CROSSPOST_INSERT_0 = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (", CROSSPOST_INSERT_1 = ",", CROSSPOST_INSERT_2 = ")";
         private const string CROSSPOST_SELECT = "SELECT LinkID FROM SourceLinkIDPairs WHERE SourceID = ";
         private const string CROSSPOST_DELETE = "DELETE FROM SourceLinkIDPairs WHERE SourceID = ";
 
-        private const int CROSSPOST_WAIT_MS = 5000, TWXTTER_WAIT_MS = 2000;
+        private const int CROSSPOST_WAIT_MS = 5000, FXTWITTER_WAIT_MS = 2000;
 
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
@@ -145,7 +146,7 @@ namespace TeBot
                 else
                 {
                     // Wait to allow any embeds to appear
-                    Thread.Sleep(TWXTTER_WAIT_MS);
+                    Thread.Sleep(FXTWITTER_WAIT_MS);
                     await SendFxtwitterUrlsIfNeeded(context);
                 }
             }
@@ -178,7 +179,7 @@ namespace TeBot
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
             bool containsTwitterVideo = false;
 
-            StringBuilder message = new StringBuilder().Append(POSTED_BY + refreshedMessage.Author.Username + "\n");
+            StringBuilder message = new StringBuilder().Append(OTHER_HEADER_0).Append(refreshedMessage.Author.Username).AppendLine(OTHER_HEADER_1);
             foreach (var embed in refreshedMessage.Embeds)
             {
                 bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
@@ -186,11 +187,11 @@ namespace TeBot
 
                 if (isTwitterVideo)
                 {
-                    string urlToAppend = FormatTwitterUrl(embed.Url);
+                    string urlToAppend = FormatTwitterUrl(embed.Url, false);
 
                     // Prevents duplicate urls from being appended multiple times
                     if (appendedEmbedUrls.Add(urlToAppend))
-                        message.Append(urlToAppend + "\n");
+                        message.AppendLine(urlToAppend);
                 }
             }
 
@@ -215,7 +216,7 @@ namespace TeBot
             // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
-                StringBuilder message = new StringBuilder().Append(POSTED_BY + refreshedMessage.Author.Username + "\n");
+                StringBuilder message = new StringBuilder().Append(CROSSPOST_HEADER_0).Append(refreshedMessage.Author.Username).AppendLine(CROSSPOST_HEADER_1);
 
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
@@ -226,11 +227,11 @@ namespace TeBot
                 HashSet<string> appendedEmbedUrls = new HashSet<string>();
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url) : embed.Url;
+                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url, true) : embed.Url;
 
                     // Prevents duplicate urls from being appended multiple times
                     if (appendedEmbedUrls.Add(urlToAppend))
-                        message.Append(urlToAppend + "\n");
+                        message.AppendLine(urlToAppend);
                 }
 
                 IUserMessage sentMessage = null;
@@ -254,9 +255,9 @@ namespace TeBot
             return url.StartsWith(TWITTER_URL);
         }
 
-        private string FormatTwitterUrl(string twitterUrl)
+        private string FormatTwitterUrl(string twitterUrl, bool isCrosspost)
         {
-            return FXTWITTER_URL + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length) + ENGLISH_ISO_CODE_SUFFIX;
+            return (isCrosspost ? FXTWITTER_URL : DFXTWITTER_URL) + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length);
         }
 
         private string RemoveTwitterTrackingInfo(string url)
