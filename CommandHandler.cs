@@ -16,7 +16,7 @@ namespace TeBot
     {
         private const string ADMIN_ONLY = "0", MOD_ONLY = "1", EVERYONE = "2";
 
-        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/";
+        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", ENGLISH_ISO_CODE_SUFFIX = "/en";
         private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
 
         private const string CROSSPOST_INSERT_0 = "INSERT INTO SourceLinkIDPairs (SourceID, LinkID) VALUES (", CROSSPOST_INSERT_1 = ",", CROSSPOST_INSERT_2 = ")";
@@ -140,12 +140,12 @@ namespace TeBot
                     Thread.Sleep(CROSSPOST_WAIT_MS);
                     await LinkImagesToOtherChannel(context, channelToPostTo);
                 }
-                // We probably only want to include bot Twxtter posts on channels people aren't posting their created art
+                // We probably only want to include bot fxtwitter posts on channels people aren't posting their created art
                 else
                 {
                     // Wait to allow any embeds to appear
                     Thread.Sleep(TWXTTER_WAIT_MS);
-                    await SendTwxtterUrlsIfNeeded(context);
+                    await SendFxtwitterUrlsIfNeeded(context);
                 }
             }
         }
@@ -170,7 +170,7 @@ namespace TeBot
             return editableBy.Equals(ADMIN_ONLY) && userPerms.Administrator;
         }
 
-        private async Task SendTwxtterUrlsIfNeeded(SocketCommandContext context)
+        private async Task SendFxtwitterUrlsIfNeeded(SocketCommandContext context)
         {
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
@@ -248,14 +248,14 @@ namespace TeBot
             }
         }
 
-        private string FormatTwitterUrl(string twitterUrl)
-        {
-            return FXTWITTER_URL + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length);
-        }
-
         private bool IsTwitterUrl(string url)
         {
             return url.StartsWith(TWITTER_URL);
+        }
+
+        private string FormatTwitterUrl(string twitterUrl)
+        {
+            return FXTWITTER_URL + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length) + ENGLISH_ISO_CODE_SUFFIX;
         }
 
         private string RemoveTwitterTrackingInfo(string url)
