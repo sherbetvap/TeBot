@@ -136,12 +136,11 @@ namespace TeBot
             else // If it is not a command check what channel it is
             {
                 // Check if key matches the context channel ID
-                var crosspostChannelEntry = crosspostChannelsDictionary[context.Channel.Id];
-                if (channel != null)
+                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong crosspostChannelEntry))
                 {
                     // Wait to allow any embeds to appear
                     Thread.Sleep(CROSSPOST_WAIT_MS);
-                    await LinkImagesToOtherChannel(context, crosspostChannelEntry.Value);
+                    await LinkImagesToOtherChannel(context, crosspostChannelEntry);
                 }
                 // We probably only want to include bot Twxtter posts on channels people aren't posting their created art
                 else
@@ -249,7 +248,7 @@ namespace TeBot
         private string RemoveTwitterContext(string url)
         {
             int contextIndex = url.IndexOf(TWITTER_CONTEXT_SYMBOL);
-            return contextIndex == -1 ? url : link.Substring(0, contextIndex);
+            return contextIndex == -1 ? url : url.Substring(0, contextIndex);
         }
 
         /// <summary>
