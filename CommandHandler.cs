@@ -34,13 +34,12 @@ namespace TeBot
         // Final variables
         private readonly DiscordSocketClient discord;
         private readonly CommandService commands;
+        private readonly SQLManager sqlManager;
         private readonly Dictionary<ulong, ulong> crosspostChannelsDictionary;
         private readonly ulong serverId;
         private readonly ulong modChannelId;
         private readonly ulong editableBy;
         private readonly string commandPrefix;
-
-        private SQLManager sqlManager;
 
         public CommandHandler(DiscordSocketClient discord, CommandService commands, IConfiguration config, SQLManager sqlManager)
         {
