@@ -109,14 +109,11 @@ namespace TeBot
                     await LinkImagesToOtherChannel(context, channelToPostTo);
                 }
                 // We probably only want to include bot fxtwitter posts on channels people aren't posting their created art
-                else
+                else if (context.Message.Content.Contains(TWITTER_URL))
                 {
                     // Wait to allow any embeds to appear
-                    if (context.Message.Content.Contains(TWITTER_URL))
-                    {
-                        Thread.Sleep(FXTWITTER_WAIT_MS);
-                        await SendFxtwitterUrlsIfNeeded(context);
-                    }
+                    Thread.Sleep(FXTWITTER_WAIT_MS);
+                    await SendFxtwitterUrlsIfNeeded(context);
                 }
             }
         }
