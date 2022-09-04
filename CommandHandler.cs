@@ -25,7 +25,7 @@ namespace TeBot
         private const char DISCORD_DISCRIMINATOR_SYMBOL = '#';
 
         // URL constants
-        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", DFXTWITTER_URL = "https://d.fxtwitter.com/";
+        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", DFXTWITTER_URL = "https://d.fxtwitter.com/", HTTP = "http";
         private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
 
         // Wait constants
@@ -102,7 +102,7 @@ namespace TeBot
             else // If it is not a command check what channel it is
             {
                 // Check if key matches the context channel ID
-                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
+                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo) && (context.Message.Attachments.Count > 0 || context.Message.Content.Contains(HTTP)))
                 {
                     // Wait to allow any embeds to appear
                     Thread.Sleep(CROSSPOST_WAIT_MS);
