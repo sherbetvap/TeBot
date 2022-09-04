@@ -20,7 +20,7 @@ namespace TeBot
 
         // Message constants
         private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
-        private const string VIDEO_HEADER_0 = "Video from ", VIDEO_HEADER_1 = "'s Twitter link:";
+        private const string VIDEO_HEADER_0 = "Video(s) from ", VIDEO_HEADER_1 = "'s Twitter link(s):";
         private const string HAS_LEFT = " has left.";
         private const char DISCORD_DISCRIMINATOR_SYMBOL = '#';
 
@@ -112,8 +112,11 @@ namespace TeBot
                 else
                 {
                     // Wait to allow any embeds to appear
-                    Thread.Sleep(FXTWITTER_WAIT_MS);
-                    await SendFxtwitterUrlsIfNeeded(context);
+                    if (context.Message.Content.Contains(TWITTER_URL))
+                    {
+                        Thread.Sleep(FXTWITTER_WAIT_MS);
+                        await SendFxtwitterUrlsIfNeeded(context);
+                    }
                 }
             }
         }
@@ -131,7 +134,8 @@ namespace TeBot
             // Link id exists, delete message and remove from DB
             if (readLinkId != NO_ID)
             {
-                ulong channelToDeleteFrom = crosspostChannelsDictionary[sourceChannel.Id];
+                // If exists, then it is a crosspost, else it is a random fxtwitter post.
+                ulong channelToDeleteFrom = GetValueOrDefault(crosspostChannelsDictionary, sourceChannel.Id, sourceChannel.Id);
 
                 // LOOK ARIA THE MESSEGE IS DELETED
                 // Hi this is Aria, good job Coffvee!
@@ -232,6 +236,13 @@ namespace TeBot
         {
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
+            // Null probably if message was deleted before bot could send a URL
+            if (refreshedMessage == null)
+            {
+                Console.WriteLine("Refreshed message null when trying to post");
+                return;
+            }
+
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
             bool containsTwitterVideo = false;
 
@@ -255,8 +266,18 @@ namespace TeBot
 
             if (containsTwitterVideo)
             {
-                // TODO: remove embeds from original message if possible
-                await context.Channel.SendMessageAsync(message.ToString());
+                IUserMessage sentMessage = null;
+                try
+                {
+                    // Send message
+                    sentMessage = await context.Channel.SendMessageAsync(message.ToString());
+                    // TODO: remove embeds from original message if possible
+                }
+                finally
+                {
+                    // Insert into database
+                    sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                }
             }
         }
 
@@ -318,6 +339,11 @@ namespace TeBot
             }
 
             return NO_ID;
+        }
+
+        public static TValue GetValueOrDefault<TKey, TValue>(IDictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue)
+        {
+            return dictionary.TryGetValue(key, out var value) ? value : defaultValue;
         }
 
         /// <summary>
