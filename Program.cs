@@ -71,7 +71,7 @@ namespace TeBot
         static SQLiteConnection CreateConnection()
         {
             // Create a new database connection:
-            SQLiteConnection sqlite_conn = new SQLiteConnection("Data Source=" + Path.Combine(dataLocation, "TeDB.db") + ";Version=3;New=False;Compress=True;");
+            SQLiteConnection sqlite_conn = new SQLiteConnection("Data Source=TeDB.db;Version=3;New=False;Compress=True;");
 
             // Open the connection:
             try
