@@ -88,7 +88,7 @@ namespace TeBot
 
             // Check if the message has a valid command prefix, or is mentioned. 
             // Check if allowed by everyone, or if admin only and then make sure user is admin
-            if (isCommand(msg, ref argPos) && (isEverybody() || isModOnlyAndModMsg(userPerms) || isAdmOnlyAndAdmMsg(userPerms)))
+            if (IsCommand(msg, ref argPos) && (IsEverybody() || IsModOnlyAndModMsg(userPerms) || IsAdmOnlyAndAdmMsg(userPerms)))
             {
                 // Execute the command
                 var result = await commands.ExecuteAsync(context, argPos, null);
@@ -276,22 +276,22 @@ namespace TeBot
             }
         }
 
-        private bool isCommand(SocketUserMessage msg, ref int argPos)
+        private bool IsCommand(SocketUserMessage msg, ref int argPos)
         {
             return msg.HasStringPrefix(commandPrefix, ref argPos) || msg.HasMentionPrefix(discord.CurrentUser, ref argPos);
         }
 
-        private bool isEverybody()
+        private bool IsEverybody()
         {
             return editableBy == EVERYONE;
         }
 
-        private bool isModOnlyAndModMsg(GuildPermissions userPerms)
+        private bool IsModOnlyAndModMsg(GuildPermissions userPerms)
         {
             return editableBy == MOD_ONLY && (userPerms.ManageChannels || userPerms.Administrator);
         }
 
-        private bool isAdmOnlyAndAdmMsg(GuildPermissions userPerms)
+        private bool IsAdmOnlyAndAdmMsg(GuildPermissions userPerms)
         {
             return editableBy == ADMIN_ONLY && userPerms.Administrator;
         }
