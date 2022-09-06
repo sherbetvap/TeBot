@@ -124,7 +124,7 @@ namespace TeBot
         /// <param name="sourceMessage"></param>
         /// <param name="sourceChannel"></param>
         /// <returns></returns>
-        private async Task OnMessageDeletedAsync(Cacheable<IMessage, ulong> sourceMessage, ISocketMessageChannel sourceChannel)
+        private async Task OnMessageDeletedAsync(Cacheable<IMessage, ulong> sourceMessage, Cacheable<IMessageChannel, ulong> sourceChannel)
         {
             ulong readLinkId = sqlManager.CheckMatch(sourceMessage.Id);
 
@@ -166,11 +166,11 @@ namespace TeBot
         /// </summary>
         /// <param name="User"></param>
         /// <returns></returns>
-        private async Task OnUserLeftAsync(SocketGuildUser user)
+        private async Task OnUserLeftAsync(SocketGuild guild, SocketUser user)
         {
             if (serverId != NO_ID)
             {
-                await user.Guild.GetTextChannel(modChannelId).SendMessageAsync(CreateDiscordUsername(user) + HAS_LEFT);
+                await guild.GetTextChannel(modChannelId).SendMessageAsync(CreateDiscordUsername(user) + HAS_LEFT);
             }
         }
 

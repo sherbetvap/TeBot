@@ -12,7 +12,7 @@ namespace TeBot
 {
     class Program
     {
-        private static string dataLocation = (new FileInfo(AppDomain.CurrentDomain.BaseDirectory)).Directory.Parent.FullName;
+        private static string DATA_LOCATION = (new FileInfo(AppDomain.CurrentDomain.BaseDirectory)).Directory.Parent.FullName;
 
         private readonly IConfiguration config;
 
@@ -30,7 +30,7 @@ namespace TeBot
             string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"stagingconfig.json");
 #else
             Console.WriteLine("Looking for Json and DB in: " + dataLocation);
-            string jsonPath = Path.Combine(dataLocation, @"stagingconfig.json");
+            string jsonPath = Path.Combine(DATA_LOCATION, @"stagingconfig.json");
 #endif
 
             // Create and build the configuration and assign to config          
