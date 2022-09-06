@@ -21,8 +21,7 @@ namespace TeBot
         private CommandService service;
         private Timer timer;
 
-        public static void Main(string[] args)
-            => new Program().MainAsync().GetAwaiter().GetResult();
+        public static void Main(string[] args) => new Program().MainAsync().GetAwaiter().GetResult();
 
         public Program()
         {

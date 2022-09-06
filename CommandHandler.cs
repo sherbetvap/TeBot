@@ -241,13 +241,11 @@ namespace TeBot
             }
 
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
-            bool containsTwitterVideo = false;
 
             StringBuilder message = new StringBuilder().Append(VIDEO_HEADER_0).Append(CreateDiscordUsername(context.User)).AppendLine(VIDEO_HEADER_1);
             foreach (var embed in refreshedMessage.Embeds)
             {
                 bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
-                containsTwitterVideo |= isTwitterVideo;
 
                 if (isTwitterVideo)
                 {
@@ -261,7 +259,7 @@ namespace TeBot
                 }
             }
 
-            if (containsTwitterVideo)
+            if (appendedEmbedUrls.Count > 0)
             {
                 IUserMessage sentMessage = null;
                 try
