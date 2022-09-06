@@ -1,5 +1,5 @@
-﻿using Discord.Commands;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
+using Discord.Commands;
 
 namespace TeBot.Modules
 {
@@ -10,6 +10,7 @@ namespace TeBot.Modules
         {
             await Context.Channel.SendMessageAsync("Success");
         }
+
         [Command("repeat", true)]
         public async Task Task2(string repeat)
         {
