@@ -102,11 +102,18 @@ namespace TeBot
             else // If it is not a command check what channel it is
             {
                 // Check if key matches the context channel ID
-                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo) && (context.Message.Attachments.Count > 0 || context.Message.Content.Contains(HTTP)))
+                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
                 {
-                    // Wait to allow any embeds to appear
-                    Thread.Sleep(CROSSPOST_WAIT_MS);
-                    await LinkImagesToOtherChannel(context, channelToPostTo);
+                    if (context.Message.Content.Contains(HTTP))
+                    {
+                        // Wait to allow any embeds to appear
+                        Thread.Sleep(CROSSPOST_WAIT_MS);
+                        await LinkImagesToOtherChannel(context, channelToPostTo);
+                    }
+                    else if (context.Message.Attachments.Count > 0)
+                    {
+                        await LinkImagesToOtherChannel(context, channelToPostTo);
+                    }
                 }
                 // We probably only want to include bot fxtwitter posts on channels people aren't posting their created art
                 else if (context.Message.Content.Contains(TWITTER_URL))
