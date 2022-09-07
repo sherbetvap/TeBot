@@ -71,7 +71,7 @@ namespace TeBot
         /// <returns></returns>
         private async Task OnMessageReceivedAsync(SocketMessage s)
         {
-            // Ensure the message is from a user/bot
+            // Ensure the message is from a user
             var msg = s as SocketUserMessage;
 
             // Ignore self when checking commands
@@ -146,7 +146,8 @@ namespace TeBot
         /// <summary>
         /// Sends a messgae in a channel when a user leaves the server.
         /// </summary>
-        /// <param name="User"></param>
+        /// <param name="guild"></param>
+        /// <param name="user"></param>
         /// <returns></returns>
         private async Task OnUserLeftAsync(SocketGuild guild, SocketUser user)
         {
