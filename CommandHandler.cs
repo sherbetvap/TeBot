@@ -89,37 +89,24 @@ namespace TeBot
             // Check if allowed by everyone, or if admin only and then make sure user is admin
             if (IsCommand(msg, ref argPos) && (IsEverybody() || IsModOnlyAndModMsg(userPerms) || IsAdmOnlyAndAdmMsg(userPerms)))
             {
-                // Execute the command
-                var result = await commands.ExecuteAsync(context, argPos, null);
-
-                // If not successful, reply with the error.
-                if (!result.IsSuccess)
-                {
-                    await context.Channel.SendMessageAsync(result.ToString());
-                }
+                ExecuteCommand(context, argPos);
             }
             else // If it is not a command check what channel it is
             {
                 // Check if key matches the context channel ID
                 if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
                 {
-                    if (context.Message.Content.Contains(HTTP))
+                    bool couldHaveEmbed = context.Message.Content.Contains(HTTP);
+                    if (couldHaveEmbed || context.Message.Attachments.Count > 0)
                     {
-                        // Wait to allow any embeds to appear
-                        await Task.Delay(CROSSPOST_WAIT_MS);
-                        await LinkImagesToOtherChannel(context, channelToPostTo);
-                    }
-                    else if (context.Message.Attachments.Count > 0)
-                    {
-                        await LinkImagesToOtherChannel(context, channelToPostTo);
+                        LinkImagesToOtherChannel(context, channelToPostTo, couldHaveEmbed);
                     }
                 }
                 // We probably only want to include bot fxtwitter posts on channels people aren't posting their created art
                 else if (context.Message.Content.Contains(TWITTER_URL))
                 {
                     // Wait to allow any embeds to appear
-                    await Task.Delay(FXTWITTER_WAIT_MS);
-                    await SendFxtwitterUrlsIfNeeded(context);
+                    SendFxtwitterUrlsIfNeeded(context);
                 }
             }
         }
@@ -146,18 +133,7 @@ namespace TeBot
                 try
                 {
                     // Try to delete linked message
-                    await discord.GetGuild(serverId).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
-                }
-                catch (Discord.Net.HttpException ex)
-                {
-                    if (ex.HttpCode == System.Net.HttpStatusCode.NotFound)
-                    {
-                        Console.WriteLine("Message to delete not found, was it deleted already?");
-                    }
-                    else
-                    {
-                        throw ex;
-                    }
+                    discord.GetGuild(serverId).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
                 }
                 finally
                 {
@@ -176,7 +152,19 @@ namespace TeBot
         {
             if (serverId != NO_ID)
             {
-                await guild.GetTextChannel(modChannelId).SendMessageAsync(CreateDiscordUsername(user) + HAS_LEFT);
+                guild.GetTextChannel(modChannelId).SendMessageAsync(CreateDiscordUsername(user) + HAS_LEFT);
+            }
+        }
+
+        private async Task ExecuteCommand(SocketCommandContext context, int argPos)
+        {
+            // Execute the command
+            var result = await commands.ExecuteAsync(context, argPos, null);
+
+            // If not successful, reply with the error.
+            if (!result.IsSuccess)
+            {
+                await context.Channel.SendMessageAsync(result.ToString());
             }
         }
 
@@ -185,9 +173,16 @@ namespace TeBot
         /// </summary>
         /// <param name="context"></param>
         /// <param name="channelToPostTo"></param>
+        /// <param name="shouldWait"></param>
         /// <returns>null</returns>
-        private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelToPostTo)
+        private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelToPostTo, bool shouldWait)
         {
+            // If needed, wait to allow any embeds to appear
+            if (shouldWait)
+            {
+                await Task.Delay(CROSSPOST_WAIT_MS);
+            }
+
             // Refresh message to retrieve generated embeds
             IMessage refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
@@ -237,6 +232,7 @@ namespace TeBot
 
         private async Task SendFxtwitterUrlsIfNeeded(SocketCommandContext context)
         {
+            await Task.Delay(FXTWITTER_WAIT_MS);
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
             // Null probably if message was deleted before bot could send a URL
