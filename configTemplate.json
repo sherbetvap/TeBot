@@ -1,19 +1,24 @@
-﻿##rename to config.json and delete this comment 
-##EditableBy 0 is admin only, 1 is mod+admin only, 2 is everyone
-##list server IDs the bot will be active in
-##add crosspost channels where the bot will copy links of images from one channel to another channel
+﻿## Rename to config.json and delete these comments.
+
+## "Token" is the Discord bot token.
+## "Prefix" is the prefix for text commands. E.g. "!".
+## "EditableBy" determines who can make commands. "0" is admin only, "1" is mod+admin only, "2" is everyone.
+## "serverID" is the ID of the server.
+## "ChannelList" is the list of used channels IDs.
+## "modChannelID" is the ID of the mod-only channel.
+## "ChannelsCrossPost" is a list of from:to channel IDs pairs that the bot will copy links of images "from" one channel and post "to" another channel.
 
 {
-	"Token": "",
-	"Prefix": "!",
-	"EditableBy": "0",
+	"Token": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+	"Prefix": "X",
+	"EditableBy": "X",
+	"serverID": "XXXXXXXXXXXXXXXXXX",
 	"ChannelList": {
-		"serverID": "XXX",
-		"botTestID": "XXX"
+		"modChannelID": "XXXXXXXXXXXXXXXXXX"
 	},
 	"ChannelsCrossPost": {
-		"XXX": "XXX",
-		"XXX": "XXX",
-		"XXX": "XXX"
+		"XXXXXXXXXXXXXXXXXX": "XXXXXXXXXXXXXXXXXX",
+		"XXXXXXXXXXXXXXXXXX": "XXXXXXXXXXXXXXXXXX",
+		"XXXXXXXXXXXXXXXXXX": "XXXXXXXXXXXXXXXXXX"
 	}
 }
