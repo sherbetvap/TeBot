@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace TeBot
@@ -107,7 +106,7 @@ namespace TeBot
                     if (context.Message.Content.Contains(HTTP))
                     {
                         // Wait to allow any embeds to appear
-                        Thread.Sleep(CROSSPOST_WAIT_MS);
+                        await Task.Delay(CROSSPOST_WAIT_MS);
                         await LinkImagesToOtherChannel(context, channelToPostTo);
                     }
                     else if (context.Message.Attachments.Count > 0)
@@ -119,7 +118,7 @@ namespace TeBot
                 else if (context.Message.Content.Contains(TWITTER_URL))
                 {
                     // Wait to allow any embeds to appear
-                    Thread.Sleep(FXTWITTER_WAIT_MS);
+                    await Task.Delay(FXTWITTER_WAIT_MS);
                     await SendFxtwitterUrlsIfNeeded(context);
                 }
             }
