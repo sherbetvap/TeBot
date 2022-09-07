@@ -6,20 +6,19 @@ using System;
 using System.Data.SQLite;
 using System.IO;
 using System.Threading.Tasks;
-using System.Timers;
 
 namespace TeBot
 {
     class Program
     {
         private static string DATA_LOCATION = (new FileInfo(AppDomain.CurrentDomain.BaseDirectory)).Directory.Parent.FullName;
+        private static int RECONNECT_WAIT_MS = 180000; // 3 minutes
 
         private readonly IConfiguration config;
 
         private DiscordSocketClient client;
         private CommandHandler commandHandler;
         private CommandService service;
-        private Timer timer;
 
         public static void Main(string[] args) => new Program().MainAsync().GetAwaiter().GetResult();
 
@@ -92,32 +91,21 @@ namespace TeBot
         }
 
         /// <summary>
-        /// When disconnected, wait for X minutes to reconnect. If not connected again then restart connection attempt. 
+        /// When disconnected, wait for 3 minutes to reconnect. If not connected again, then restart connection attempt. 
         /// </summary>
         /// <param name="arg"></param>
         /// <returns></returns>
-        private Task OnDisconnected(Exception arg)
+        private async Task OnDisconnected(Exception arg)
         {
-            timer = new Timer(3 * 60 * 1000) { AutoReset = true };
-            timer.Elapsed += async (object sender, ElapsedEventArgs e) =>
-            {
-                //if not connected after waiting 3 minutes
-                if (client.ConnectionState != ConnectionState.Connected)
-                {
-                    await client.StopAsync();
-                    await client.StartAsync();
-                }
-            };
+            // Immediately try to connect again
+            await client.StartAsync();
 
-            //while still not connected try to connect
+            // If client is still not connected, try to connect until it is
             while (client.ConnectionState != ConnectionState.Connected)
             {
-                timer.Enabled = true;
+                await Task.Delay(RECONNECT_WAIT_MS);
+                await client.StartAsync();
             }
-            //end timer after connecting again
-            timer.Enabled = false;
-
-            return Task.CompletedTask;
         }
     }
 }
