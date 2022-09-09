@@ -21,7 +21,6 @@ namespace TeBot
         private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
         private const string VIDEO_HEADER_0 = "Video(s) from ", VIDEO_HEADER_1 = "'s Twitter link(s):";
         private const string HAS_LEFT = " has left.";
-        private const string LINK_FORMATTING_PREFIX = "  - ";
         private const string ORIGINAL_MESSAGE_HEADER = "Original Message:";
         private const string USER_LINK_0 = "<@", USER_LINK_1 = ">";
 
@@ -206,7 +205,7 @@ namespace TeBot
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
                 {
-                    message.Append(LINK_FORMATTING_PREFIX).AppendLine(attachment.Url);
+                    message.AppendLine(attachment.Url);
                 }
 
                 HashSet<string> appendedEmbedUrls = new HashSet<string>();
@@ -217,12 +216,11 @@ namespace TeBot
                     // Prevents duplicate urls from being appended multiple times
                     if (appendedEmbedUrls.Add(urlToAppend))
                     {
-                        message.Append(LINK_FORMATTING_PREFIX).AppendLine(urlToAppend);
+                        message.AppendLine(urlToAppend);
                     }
                 }
 
-                message.AppendLine(ORIGINAL_MESSAGE_HEADER)
-                        .Append(LINK_FORMATTING_PREFIX).Append(DISCORD_MESSAGE_LINK).Append(context.Guild.Id).Append(FORWARD_SLASH).Append(context.Channel.Id).Append(FORWARD_SLASH).Append(context.Message.Id).AppendLine();
+                message.AppendLine(ORIGINAL_MESSAGE_HEADER).Append(DISCORD_MESSAGE_LINK).Append(context.Guild.Id).Append(FORWARD_SLASH).Append(context.Channel.Id).Append(FORWARD_SLASH).Append(context.Message.Id).AppendLine();
 
                 IUserMessage sentMessage = null;
                 try
@@ -267,7 +265,7 @@ namespace TeBot
                     // Prevents duplicate urls from being appended multiple times
                     if (appendedEmbedUrls.Add(urlToAppend))
                     {
-                        message.Append(LINK_FORMATTING_PREFIX).AppendLine(urlToAppend);
+                        message.AppendLine(urlToAppend);
                     }
                 }
             }
