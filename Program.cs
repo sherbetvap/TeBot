@@ -6,13 +6,13 @@ using System;
 using System.Data.SQLite;
 using System.IO;
 using System.Threading.Tasks;
+using System.Timers;
 
 namespace TeBot
 {
     class Program
     {
-        private static string DATA_LOCATION = (new FileInfo(AppDomain.CurrentDomain.BaseDirectory)).Directory.Parent.FullName;
-        private static int RECONNECT_WAIT_MS = 180000; // 3 minutes
+        private static readonly string DATA_LOCATION = (new FileInfo(AppDomain.CurrentDomain.BaseDirectory)).Directory.FullName;
 
         private readonly IConfiguration config;
 
@@ -56,8 +56,6 @@ namespace TeBot
 
             commandHandler = new CommandHandler(client, service, config, sqlManager);
 
-            client.Disconnected += OnDisconnected;
-
             client.Log += Log;
             await client.LoginAsync(TokenType.Bot, config["Token"]);
             await client.StartAsync();
@@ -78,7 +76,7 @@ namespace TeBot
             }
             catch (Exception ex)
             {
-                Console.WriteLine("COULD NOT CONNECT TO DB: " + ex.ToString());
+                Console.WriteLine("Could not connect to the database: " + ex.ToString());
             }
 
             return sqlite_conn;
@@ -88,31 +86,6 @@ namespace TeBot
         {
             Console.WriteLine(msg.ToString());
             return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// When disconnected, wait for 3 minutes to reconnect. If not connected again, then restart connection attempt. 
-        /// </summary>
-        /// <param name="arg"></param>
-        /// <returns></returns>
-        private async Task OnDisconnected(Exception arg)
-        {
-            // Immediately try to connect again
-            if (client.ConnectionState == ConnectionState.Disconnected)
-            {
-                await client.StartAsync();
-            }
-
-            // If client is still not connected, try to connect until it is
-            while (client.ConnectionState != ConnectionState.Connected)
-            {
-                // Ignore if the client is in an "in-between" state
-                if (client.ConnectionState != ConnectionState.Connecting && client.ConnectionState != ConnectionState.Disconnecting)
-                {
-                    await Task.Delay(RECONNECT_WAIT_MS);
-                    await client.StartAsync();
-                }
-            }
         }
     }
 }
