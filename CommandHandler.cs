@@ -21,14 +21,14 @@ namespace TeBot
         private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
         private const string VIDEO_HEADER_0 = "Video(s) from ", VIDEO_HEADER_1 = "'s Twitter link(s):";
         private const string HAS_LEFT = " has left.";
-        private const string LINK_FORMATTING_PREFIX = "    - ";
+        private const string LINK_FORMATTING_PREFIX = "  - ";
         private const string ORIGINAL_MESSAGE_HEADER = "Original Message:";
-        private const char DISCORD_DISCRIMINATOR_SYMBOL = '#', FORWARD_SLASH = '/';
+        private const string USER_LINK_0 = "<@", USER_LINK_1 = ">";
 
         // URL constants
         private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", HTTP = "http";
-        private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
         private const string DISCORD_MESSAGE_LINK = "https://discord.com/channels/";
+        private const char TWITTER_TRACKING_INFO_SYMBOL = '?', FORWARD_SLASH = '/';
 
         // Wait constants
         private const int CROSSPOST_WAIT_MS = 5000, FXTWITTER_WAIT_MS = 2000;
@@ -156,7 +156,7 @@ namespace TeBot
         {
             if (serverId != NO_ID)
             {
-                guild.GetTextChannel(modChannelId).SendMessageAsync(CreateDiscordUsername(user) + HAS_LEFT);
+                guild.GetTextChannel(modChannelId).SendMessageAsync(text: CreateDiscordUserLink(user) + HAS_LEFT, allowedMentions: AllowedMentions.None);
             }
         }
 
@@ -201,7 +201,7 @@ namespace TeBot
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
                 StringBuilder message = new StringBuilder()
-                        .Append(CROSSPOST_HEADER_0).Append(CreateDiscordUsername(context.User)).AppendLine(CROSSPOST_HEADER_1);
+                        .Append(CROSSPOST_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(CROSSPOST_HEADER_1);
 
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
@@ -228,7 +228,7 @@ namespace TeBot
                 try
                 {
                     // Send message
-                    sentMessage = await context.Guild.GetTextChannel(channelToPostTo).SendMessageAsync(message.ToString());
+                    sentMessage = await context.Guild.GetTextChannel(channelToPostTo).SendMessageAsync(text: message.ToString(), allowedMentions: AllowedMentions.None);
                 }
                 finally
                 {
@@ -255,7 +255,7 @@ namespace TeBot
 
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
 
-            StringBuilder message = new StringBuilder().Append(VIDEO_HEADER_0).Append(CreateDiscordUsername(context.User)).AppendLine(VIDEO_HEADER_1);
+            StringBuilder message = new StringBuilder().Append(VIDEO_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(VIDEO_HEADER_1);
             foreach (var embed in refreshedMessage.Embeds)
             {
                 bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
@@ -278,7 +278,7 @@ namespace TeBot
                 try
                 {
                     // Send message
-                    sentMessage = await context.Message.ReplyAsync(message.ToString());
+                    sentMessage = await context.Message.ReplyAsync(text: message.ToString(), allowedMentions: AllowedMentions.None);
                     context.Message.ModifyAsync(msg => msg.Flags = MessageFlags.SuppressEmbeds);
                 }
                 finally
@@ -328,9 +328,9 @@ namespace TeBot
             return trackingInfoIndex == -1 ? url : url.Substring(0, trackingInfoIndex);
         }
 
-        private string CreateDiscordUsername(SocketUser user)
+        private string CreateDiscordUserLink(SocketUser user)
         {
-            return user.Username + DISCORD_DISCRIMINATOR_SYMBOL + user.Discriminator;
+            return USER_LINK_0 + user.Id + USER_LINK_1;
         }
 
         /// <summary>
