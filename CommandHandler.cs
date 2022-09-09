@@ -21,11 +21,14 @@ namespace TeBot
         private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
         private const string VIDEO_HEADER_0 = "Video(s) from ", VIDEO_HEADER_1 = "'s Twitter link(s):";
         private const string HAS_LEFT = " has left.";
-        private const char DISCORD_DISCRIMINATOR_SYMBOL = '#';
+        private const string LINK_FORMATTING_PREFIX = "    - ";
+        private const string ORIGINAL_MESSAGE_HEADER = "Original Message:";
+        private const char DISCORD_DISCRIMINATOR_SYMBOL = '#', FORWARD_SLASH = '/';
 
         // URL constants
-        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", DFXTWITTER_URL = "https://d.fxtwitter.com/", HTTP = "http";
+        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", HTTP = "http";
         private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
+        private const string DISCORD_MESSAGE_LINK = "https://discord.com/channels/";
 
         // Wait constants
         private const int CROSSPOST_WAIT_MS = 5000, FXTWITTER_WAIT_MS = 2000;
@@ -197,25 +200,29 @@ namespace TeBot
             // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
-                StringBuilder message = new StringBuilder().Append(CROSSPOST_HEADER_0).Append(CreateDiscordUsername(context.User)).AppendLine(CROSSPOST_HEADER_1);
+                StringBuilder message = new StringBuilder()
+                        .Append(CROSSPOST_HEADER_0).Append(CreateDiscordUsername(context.User)).AppendLine(CROSSPOST_HEADER_1);
 
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
                 {
-                    message.AppendLine(attachment.Url);
+                    message.Append(LINK_FORMATTING_PREFIX).AppendLine(attachment.Url);
                 }
 
                 HashSet<string> appendedEmbedUrls = new HashSet<string>();
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url, true) : embed.Url;
+                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url) : embed.Url;
 
                     // Prevents duplicate urls from being appended multiple times
                     if (appendedEmbedUrls.Add(urlToAppend))
                     {
-                        message.AppendLine(urlToAppend);
+                        message.Append(LINK_FORMATTING_PREFIX).AppendLine(urlToAppend);
                     }
                 }
+
+                message.AppendLine(ORIGINAL_MESSAGE_HEADER)
+                        .Append(LINK_FORMATTING_PREFIX).Append(DISCORD_MESSAGE_LINK).Append(context.Guild.Id).Append(FORWARD_SLASH).Append(context.Channel.Id).Append(FORWARD_SLASH).Append(context.Message.Id).AppendLine();
 
                 IUserMessage sentMessage = null;
                 try
@@ -225,8 +232,11 @@ namespace TeBot
                 }
                 finally
                 {
-                    // Insert into database
-                    sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    // Insert into database if the message was successfully sent
+                    if (sentMessage != null)
+                    {
+                        sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    }
                 }
             }
         }
@@ -252,12 +262,12 @@ namespace TeBot
 
                 if (isTwitterVideo)
                 {
-                    string urlToAppend = FormatTwitterUrl(embed.Url, false);
+                    string urlToAppend = FormatTwitterUrl(embed.Url);
 
                     // Prevents duplicate urls from being appended multiple times
                     if (appendedEmbedUrls.Add(urlToAppend))
                     {
-                        message.AppendLine(urlToAppend);
+                        message.Append(LINK_FORMATTING_PREFIX).AppendLine(urlToAppend);
                     }
                 }
             }
@@ -268,13 +278,16 @@ namespace TeBot
                 try
                 {
                     // Send message
-                    sentMessage = await context.Channel.SendMessageAsync(message.ToString());
-                    // TODO: remove embeds from original message if possible
+                    sentMessage = await context.Message.ReplyAsync(message.ToString());
+                    context.Message.ModifyAsync(msg => msg.Flags = MessageFlags.SuppressEmbeds);
                 }
                 finally
                 {
-                    // Insert into database
-                    sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    // Insert into database if the message was successfully sent
+                    if (sentMessage != null)
+                    {
+                        sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    }
                 }
             }
         }
@@ -304,9 +317,9 @@ namespace TeBot
             return url.StartsWith(TWITTER_URL);
         }
 
-        private string FormatTwitterUrl(string twitterUrl, bool isCrosspost)
+        private string FormatTwitterUrl(string twitterUrl)
         {
-            return (isCrosspost ? FXTWITTER_URL : DFXTWITTER_URL) + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length);
+            return FXTWITTER_URL + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length);
         }
 
         private string RemoveTwitterTrackingInfo(string url)
