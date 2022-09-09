@@ -98,13 +98,20 @@ namespace TeBot
         private async Task OnDisconnected(Exception arg)
         {
             // Immediately try to connect again
-            await client.StartAsync();
+            if (client.ConnectionState == ConnectionState.Disconnected)
+            {
+                await client.StartAsync();
+            }
 
             // If client is still not connected, try to connect until it is
             while (client.ConnectionState != ConnectionState.Connected)
             {
-                await Task.Delay(RECONNECT_WAIT_MS);
-                await client.StartAsync();
+                // Ignore if the client is in an "in-between" state
+                if (client.ConnectionState != ConnectionState.Connecting && client.ConnectionState != ConnectionState.Disconnecting)
+                {
+                    await Task.Delay(RECONNECT_WAIT_MS);
+                    await client.StartAsync();
+                }
             }
         }
     }
