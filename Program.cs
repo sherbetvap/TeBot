@@ -6,7 +6,6 @@ using System;
 using System.Data.SQLite;
 using System.IO;
 using System.Threading.Tasks;
-using System.Timers;
 
 namespace TeBot
 {
@@ -25,10 +24,10 @@ namespace TeBot
         public Program()
         {
 #if DEBUG
-            string jsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"stagingconfig.json");
+            string jsonPath = Path.Combine(DATA_LOCATION, @"stagingconfig.json");
 #else
             Console.WriteLine("Looking for Json and DB in: " + dataLocation);
-            string jsonPath = Path.Combine(DATA_LOCATION, @"stagingconfig.json");
+            string jsonPath = Path.Combine(DATA_LOCATION, @"config.json");
 #endif
 
             // Create and build the configuration and assign to config          
@@ -89,4 +88,3 @@ namespace TeBot
         }
     }
 }
-
