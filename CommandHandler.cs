@@ -20,9 +20,12 @@ namespace TeBot
         // Message constants
         private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
         private const string VIDEO_HEADER_0 = "Video(s) from ", VIDEO_HEADER_1 = "'s Twitter link(s):";
+        private const string ATTEMPTING_TO_EMBED = "Discord couldn't load Twitter embeds, attempting to load with FixTweet:\n";
         private const string HAS_LEFT = " has left.";
         private const string ORIGINAL_MESSAGE_HEADER = "Original Message:";
         private const string USER_LINK_0 = "<@", USER_LINK_1 = ">";
+        private const string SPOILER = "SPOILER_", SPOILER_TAG = "||";
+        private static readonly char[] WHITE_SPACE_CHARS = { ' ', '\n', '\t' };
 
         // URL constants
         private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", HTTP = "http";
@@ -87,29 +90,26 @@ namespace TeBot
             var userPerms = (context.User as IGuildUser).GuildPermissions;
             int argPos = 0;
 
-            // Check if the message has a valid command prefix, or is mentioned. 
+            // Check if the message has a valid command prefix, or is mentioned
             // Check if allowed by everyone, or if admin only and then make sure user is admin
             if (IsCommand(msg, ref argPos) && (IsEverybody() || IsModOnlyAndModMsg(userPerms) || IsAdmOnlyAndAdmMsg(userPerms)))
             {
                 ExecuteCommand(context, argPos);
             }
-            else // If it is not a command check what channel it is
+            // Crosspost if the message is within a crosspost channel
+            else if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
             {
-                // Check if key matches the context channel ID
-                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
+                bool couldHaveEmbed = context.Message.Content.Contains(HTTP);
+                if (couldHaveEmbed || context.Message.Attachments.Count > 0)
                 {
-                    bool couldHaveEmbed = context.Message.Content.Contains(HTTP);
-                    if (couldHaveEmbed || context.Message.Attachments.Count > 0)
-                    {
-                        LinkImagesToOtherChannel(context, channelToPostTo, couldHaveEmbed);
-                    }
+                    LinkImagesToOtherChannel(context, channelToPostTo, couldHaveEmbed);
                 }
-                // We probably only want to include bot fxtwitter posts on channels people aren't posting their created art
-                else if (context.Message.Content.Contains(TWITTER_URL))
-                {
-                    // Wait to allow any embeds to appear
-                    SendFxtwitterUrlsIfNeeded(context);
-                }
+            }
+            // We only want to include bot FixTweet posts on channels people aren't posting their created art
+            else if (context.Message.Content.Contains(TWITTER_URL))
+            {
+                // Wait to allow any embeds to appear
+                SendFxtwitterUrlsIfNeeded(context);
             }
         }
 
@@ -199,13 +199,22 @@ namespace TeBot
             // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
-                StringBuilder message = new StringBuilder()
-                        .Append(CROSSPOST_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(CROSSPOST_HEADER_1);
+                StringBuilder message = new StringBuilder().Append(CROSSPOST_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(CROSSPOST_HEADER_1);
 
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
                 {
-                    message.AppendLine(attachment.Url);
+                    String urlToAppend;
+                    if (attachment.Url.Contains(SPOILER))
+                    {
+                        urlToAppend = SPOILER_TAG + attachment.Url + " " + SPOILER_TAG;
+                    }
+                    else
+                    {
+                        urlToAppend = attachment.Url;
+                    }
+
+                    message.AppendLine(urlToAppend);
                 }
 
                 HashSet<string> appendedEmbedUrls = new HashSet<string>();
@@ -252,20 +261,45 @@ namespace TeBot
             }
 
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
+            StringBuilder message = new StringBuilder();
 
-            StringBuilder message = new StringBuilder().Append(VIDEO_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(VIDEO_HEADER_1);
-            foreach (var embed in refreshedMessage.Embeds)
+            // Discord couldn't load embeds, try using FixTweet.
+            if (refreshedMessage.Embeds.Count == 0)
             {
-                bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
+                message.Append(ATTEMPTING_TO_EMBED);
 
-                if (isTwitterVideo)
+                string[] words = refreshedMessage.Content.Split(WHITE_SPACE_CHARS);
+                foreach (var word in words)
                 {
-                    string urlToAppend = FormatTwitterUrl(embed.Url);
-
-                    // Prevents duplicate urls from being appended multiple times
-                    if (appendedEmbedUrls.Add(urlToAppend))
+                    if (word.StartsWith(TWITTER_URL))
                     {
-                        message.AppendLine(urlToAppend);
+                        string urlToAppend = FormatTwitterUrl(word);
+
+                        if (appendedEmbedUrls.Add(urlToAppend))
+                        {
+                            message.AppendLine(urlToAppend);
+                        }
+                    }
+                }
+            }
+            // Discord could load embeds, only use FxTwitter if there is a video within the embeds.
+            else
+            {
+                message.Append(VIDEO_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(VIDEO_HEADER_1);
+
+                foreach (var embed in refreshedMessage.Embeds)
+                {
+                    bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
+
+                    if (isTwitterVideo)
+                    {
+                        string urlToAppend = FormatTwitterUrl(embed.Url);
+
+                        // Prevents duplicate urls from being appended multiple times
+                        if (appendedEmbedUrls.Add(urlToAppend))
+                        {
+                            message.AppendLine(urlToAppend);
+                        }
                     }
                 }
             }
