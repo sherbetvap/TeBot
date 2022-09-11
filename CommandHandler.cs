@@ -19,8 +19,8 @@ namespace TeBot
 
         // Message constants
         private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
-        private const string VIDEO_HEADER_0 = "Video(s) from ", VIDEO_HEADER_1 = "'s Twitter link(s):";
-        private const string ATTEMPTING_TO_EMBED = "Discord couldn't load Twitter embeds, attempting to load with FixTweet:\n";
+        private const string MEDIA_HEADER_0 = "Media from ", MEDIA_HEADER_1 = "'s post:";
+        private const string ATTEMPTING_TO_EMBED_0 = "Couldn't load embeds from ", ATTEMPTING_TO_EMBED_1 = " post, attempting with FixTweet:";
         private const string HAS_LEFT = " has left.";
         private const string ORIGINAL_MESSAGE_HEADER = "Original Message:";
         private const string USER_LINK_0 = "<@", USER_LINK_1 = ">";
@@ -259,14 +259,20 @@ namespace TeBot
                 Console.WriteLine("Refreshed message null when trying to post");
                 return;
             }
+            else if (refreshedMessage.IsSuppressed)
+            {
+                Console.WriteLine("Message should not have embeds, moving on");
+                return;
+            }
 
+            bool shouldPost = false;
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
             StringBuilder message = new StringBuilder();
 
-            // Discord couldn't load embeds, try using FixTweet.
+            // Discord couldn't load embeds, try using FixTweet
             if (refreshedMessage.Embeds.Count == 0)
             {
-                message.Append(ATTEMPTING_TO_EMBED);
+                message.Append(ATTEMPTING_TO_EMBED_0).Append(CreateDiscordUserLink(context.User)).AppendLine(ATTEMPTING_TO_EMBED_1);
 
                 string[] words = refreshedMessage.Content.Split(WHITE_SPACE_CHARS);
                 foreach (var word in words)
@@ -278,33 +284,38 @@ namespace TeBot
                         if (appendedEmbedUrls.Add(urlToAppend))
                         {
                             message.AppendLine(urlToAppend);
+                            shouldPost = true;
                         }
                     }
                 }
             }
-            // Discord could load embeds, only use FxTwitter if there is a video within the embeds.
+            // Discord could load embeds, only use FxTwitter if there is a video within the embeds, keep other non=Twitter video embeds included as well
             else
             {
-                message.Append(VIDEO_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(VIDEO_HEADER_1);
+                message.Append(MEDIA_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(MEDIA_HEADER_1);
 
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
-
-                    if (isTwitterVideo)
+                    string urlToAppend;
+                    if (IsTwitterUrl(embed.Url))
                     {
-                        string urlToAppend = FormatTwitterUrl(embed.Url);
+                        urlToAppend = FormatTwitterUrl(embed.Url);
+                        shouldPost |= embed.Video != null;
+                    }
+                    else
+                    {
+                        urlToAppend = embed.Url;
+                    }
 
-                        // Prevents duplicate urls from being appended multiple times
-                        if (appendedEmbedUrls.Add(urlToAppend))
-                        {
-                            message.AppendLine(urlToAppend);
-                        }
+                    // Prevents duplicate urls from being appended multiple times
+                    if (appendedEmbedUrls.Add(urlToAppend))
+                    {
+                        message.AppendLine(urlToAppend);
                     }
                 }
             }
 
-            if (appendedEmbedUrls.Count > 0)
+            if (shouldPost)
             {
                 IUserMessage sentMessage = null;
                 try
