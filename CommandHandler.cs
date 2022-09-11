@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace TeBot
@@ -21,12 +20,17 @@ namespace TeBot
         // Message constants
         private const string CROSSPOST_HEADER_0 = "Posted by ", CROSSPOST_HEADER_1 = ":";
         private const string VIDEO_HEADER_0 = "Video(s) from ", VIDEO_HEADER_1 = "'s Twitter link(s):";
+        private const string ATTEMPTING_TO_EMBED = "Discord couldn't load Twitter embeds, attempting to load with FixTweet:\n";
         private const string HAS_LEFT = " has left.";
-        private const char DISCORD_DISCRIMINATOR_SYMBOL = '#';
+        private const string ORIGINAL_MESSAGE_HEADER = "Original Message:";
+        private const string USER_LINK_0 = "<@", USER_LINK_1 = ">";
+        private const string SPOILER = "SPOILER_", SPOILER_TAG = "||";
+        private static readonly char[] WHITE_SPACE_CHARS = { ' ', '\n', '\t' };
 
         // URL constants
-        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", DFXTWITTER_URL = "https://d.fxtwitter.com/", HTTP = "http";
-        private const char TWITTER_TRACKING_INFO_SYMBOL = '?';
+        private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", HTTP = "http";
+        private const string DISCORD_MESSAGE_LINK = "https://discord.com/channels/";
+        private const char TWITTER_TRACKING_INFO_SYMBOL = '?', FORWARD_SLASH = '/';
 
         // Wait constants
         private const int CROSSPOST_WAIT_MS = 5000, FXTWITTER_WAIT_MS = 2000;
@@ -72,7 +76,7 @@ namespace TeBot
         /// <returns></returns>
         private async Task OnMessageReceivedAsync(SocketMessage s)
         {
-            // Ensure the message is from a user/bot
+            // Ensure the message is from a user
             var msg = s as SocketUserMessage;
 
             // Ignore self when checking commands
@@ -86,35 +90,26 @@ namespace TeBot
             var userPerms = (context.User as IGuildUser).GuildPermissions;
             int argPos = 0;
 
-            // Check if the message has a valid command prefix, or is mentioned. 
+            // Check if the message has a valid command prefix, or is mentioned
             // Check if allowed by everyone, or if admin only and then make sure user is admin
-            if (isCommand(msg, ref argPos) && (isEverybody() || isModOnlyAndModMsg(userPerms) || isAdmOnlyAndAdmMsg(userPerms)))
+            if (IsCommand(msg, ref argPos) && (IsEverybody() || IsModOnlyAndModMsg(userPerms) || IsAdmOnlyAndAdmMsg(userPerms)))
             {
-                // Execute the command
-                var result = await commands.ExecuteAsync(context, argPos, null);
-
-                // If not successful, reply with the error.
-                if (!result.IsSuccess)
+                ExecuteCommand(context, argPos);
+            }
+            // Crosspost if the message is within a crosspost channel
+            else if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
+            {
+                bool couldHaveEmbed = context.Message.Content.Contains(HTTP);
+                if (couldHaveEmbed || context.Message.Attachments.Count > 0)
                 {
-                    await context.Channel.SendMessageAsync(result.ToString());
+                    LinkImagesToOtherChannel(context, channelToPostTo, couldHaveEmbed);
                 }
             }
-            else // If it is not a command check what channel it is
+            // We only want to include bot FixTweet posts on channels people aren't posting their created art
+            else if (context.Message.Content.Contains(TWITTER_URL))
             {
-                // Check if key matches the context channel ID
-                if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo) && (context.Message.Attachments.Count > 0 || context.Message.Content.Contains(HTTP)))
-                {
-                    // Wait to allow any embeds to appear
-                    Thread.Sleep(CROSSPOST_WAIT_MS);
-                    await LinkImagesToOtherChannel(context, channelToPostTo);
-                }
-                // We probably only want to include bot fxtwitter posts on channels people aren't posting their created art
-                else if (context.Message.Content.Contains(TWITTER_URL))
-                {
-                    // Wait to allow any embeds to appear
-                    Thread.Sleep(FXTWITTER_WAIT_MS);
-                    await SendFxtwitterUrlsIfNeeded(context);
-                }
+                // Wait to allow any embeds to appear
+                SendFxtwitterUrlsIfNeeded(context);
             }
         }
 
@@ -124,7 +119,7 @@ namespace TeBot
         /// <param name="sourceMessage"></param>
         /// <param name="sourceChannel"></param>
         /// <returns></returns>
-        private async Task OnMessageDeletedAsync(Cacheable<IMessage, ulong> sourceMessage, ISocketMessageChannel sourceChannel)
+        private async Task OnMessageDeletedAsync(Cacheable<IMessage, ulong> sourceMessage, Cacheable<IMessageChannel, ulong> sourceChannel)
         {
             ulong readLinkId = sqlManager.CheckMatch(sourceMessage.Id);
 
@@ -140,18 +135,7 @@ namespace TeBot
                 try
                 {
                     // Try to delete linked message
-                    await discord.GetGuild(serverId).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
-                }
-                catch (Discord.Net.HttpException ex)
-                {
-                    if (ex.HttpCode == System.Net.HttpStatusCode.NotFound)
-                    {
-                        Console.WriteLine("Message to delete not found, was it deleted already?");
-                    }
-                    else
-                    {
-                        throw ex;
-                    }
+                    discord.GetGuild(serverId).GetTextChannel(channelToDeleteFrom).DeleteMessageAsync(readLinkId);
                 }
                 finally
                 {
@@ -164,13 +148,26 @@ namespace TeBot
         /// <summary>
         /// Sends a messgae in a channel when a user leaves the server.
         /// </summary>
-        /// <param name="User"></param>
+        /// <param name="guild"></param>
+        /// <param name="user"></param>
         /// <returns></returns>
-        private async Task OnUserLeftAsync(SocketGuildUser user)
+        private async Task OnUserLeftAsync(SocketGuild guild, SocketUser user)
         {
             if (serverId != NO_ID)
             {
-                await user.Guild.GetTextChannel(modChannelId).SendMessageAsync(CreateDiscordUsername(user) + HAS_LEFT);
+                guild.GetTextChannel(modChannelId).SendMessageAsync(text: CreateDiscordUserLink(user) + HAS_LEFT, allowedMentions: AllowedMentions.None);
+            }
+        }
+
+        private async Task ExecuteCommand(SocketCommandContext context, int argPos)
+        {
+            // Execute the command
+            var result = await commands.ExecuteAsync(context, argPos, null);
+
+            // If not successful, reply with the error.
+            if (!result.IsSuccess)
+            {
+                await context.Channel.SendMessageAsync(result.ToString());
             }
         }
 
@@ -179,9 +176,16 @@ namespace TeBot
         /// </summary>
         /// <param name="context"></param>
         /// <param name="channelToPostTo"></param>
+        /// <param name="shouldWait"></param>
         /// <returns>null</returns>
-        private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelToPostTo)
+        private async Task LinkImagesToOtherChannel(SocketCommandContext context, ulong channelToPostTo, bool shouldWait)
         {
+            // If needed, wait to allow any embeds to appear
+            if (shouldWait)
+            {
+                await Task.Delay(CROSSPOST_WAIT_MS);
+            }
+
             // Refresh message to retrieve generated embeds
             IMessage refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
@@ -195,18 +199,28 @@ namespace TeBot
             // Message must contain a link or file or else it will not be copied
             if (refreshedMessage.Attachments.Count > 0 || refreshedMessage.Embeds.Count > 0)
             {
-                StringBuilder message = new StringBuilder().Append(CROSSPOST_HEADER_0).Append(CreateDiscordUsername(context.User)).AppendLine(CROSSPOST_HEADER_1);
+                StringBuilder message = new StringBuilder().Append(CROSSPOST_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(CROSSPOST_HEADER_1);
 
                 // Display files first then link
                 foreach (var attachment in refreshedMessage.Attachments)
                 {
-                    message.AppendLine(attachment.Url);
+                    String urlToAppend;
+                    if (attachment.Url.Contains(SPOILER))
+                    {
+                        urlToAppend = SPOILER_TAG + attachment.Url + " " + SPOILER_TAG;
+                    }
+                    else
+                    {
+                        urlToAppend = attachment.Url;
+                    }
+
+                    message.AppendLine(urlToAppend);
                 }
 
                 HashSet<string> appendedEmbedUrls = new HashSet<string>();
                 foreach (var embed in refreshedMessage.Embeds)
                 {
-                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url, true) : embed.Url;
+                    string urlToAppend = IsTwitterUrl(embed.Url) ? FormatTwitterUrl(embed.Url) : embed.Url;
 
                     // Prevents duplicate urls from being appended multiple times
                     if (appendedEmbedUrls.Add(urlToAppend))
@@ -215,22 +229,28 @@ namespace TeBot
                     }
                 }
 
+                message.AppendLine(ORIGINAL_MESSAGE_HEADER).Append(DISCORD_MESSAGE_LINK).Append(context.Guild.Id).Append(FORWARD_SLASH).Append(context.Channel.Id).Append(FORWARD_SLASH).Append(context.Message.Id).AppendLine();
+
                 IUserMessage sentMessage = null;
                 try
                 {
                     // Send message
-                    sentMessage = await context.Guild.GetTextChannel(channelToPostTo).SendMessageAsync(message.ToString());
+                    sentMessage = await context.Guild.GetTextChannel(channelToPostTo).SendMessageAsync(text: message.ToString(), allowedMentions: AllowedMentions.None);
                 }
                 finally
                 {
-                    // Insert into database
-                    sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    // Insert into database if the message was successfully sent
+                    if (sentMessage != null)
+                    {
+                        sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    }
                 }
             }
         }
 
         private async Task SendFxtwitterUrlsIfNeeded(SocketCommandContext context)
         {
+            await Task.Delay(FXTWITTER_WAIT_MS);
             var refreshedMessage = await context.Channel.GetMessageAsync(context.Message.Id);
 
             // Null probably if message was deleted before bot could send a URL
@@ -241,59 +261,85 @@ namespace TeBot
             }
 
             HashSet<string> appendedEmbedUrls = new HashSet<string>();
-            bool containsTwitterVideo = false;
+            StringBuilder message = new StringBuilder();
 
-            StringBuilder message = new StringBuilder().Append(VIDEO_HEADER_0).Append(CreateDiscordUsername(context.User)).AppendLine(VIDEO_HEADER_1);
-            foreach (var embed in refreshedMessage.Embeds)
+            // Discord couldn't load embeds, try using FixTweet.
+            if (refreshedMessage.Embeds.Count == 0)
             {
-                bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
-                containsTwitterVideo |= isTwitterVideo;
+                message.Append(ATTEMPTING_TO_EMBED);
 
-                if (isTwitterVideo)
+                string[] words = refreshedMessage.Content.Split(WHITE_SPACE_CHARS);
+                foreach (var word in words)
                 {
-                    string urlToAppend = FormatTwitterUrl(embed.Url, false);
-
-                    // Prevents duplicate urls from being appended multiple times
-                    if (appendedEmbedUrls.Add(urlToAppend))
+                    if (word.StartsWith(TWITTER_URL))
                     {
-                        message.AppendLine(urlToAppend);
+                        string urlToAppend = FormatTwitterUrl(word);
+
+                        if (appendedEmbedUrls.Add(urlToAppend))
+                        {
+                            message.AppendLine(urlToAppend);
+                        }
+                    }
+                }
+            }
+            // Discord could load embeds, only use FxTwitter if there is a video within the embeds.
+            else
+            {
+                message.Append(VIDEO_HEADER_0).Append(CreateDiscordUserLink(context.User)).AppendLine(VIDEO_HEADER_1);
+
+                foreach (var embed in refreshedMessage.Embeds)
+                {
+                    bool isTwitterVideo = IsTwitterUrl(embed.Url) && embed.Video != null;
+
+                    if (isTwitterVideo)
+                    {
+                        string urlToAppend = FormatTwitterUrl(embed.Url);
+
+                        // Prevents duplicate urls from being appended multiple times
+                        if (appendedEmbedUrls.Add(urlToAppend))
+                        {
+                            message.AppendLine(urlToAppend);
+                        }
                     }
                 }
             }
 
-            if (containsTwitterVideo)
+            if (appendedEmbedUrls.Count > 0)
             {
                 IUserMessage sentMessage = null;
                 try
                 {
                     // Send message
-                    sentMessage = await context.Channel.SendMessageAsync(message.ToString());
-                    // TODO: remove embeds from original message if possible
+                    sentMessage = await context.Message.ReplyAsync(text: message.ToString(), allowedMentions: AllowedMentions.None);
+                    context.Message.ModifyAsync(msg => msg.Flags = MessageFlags.SuppressEmbeds);
                 }
                 finally
                 {
-                    // Insert into database
-                    sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    // Insert into database if the message was successfully sent
+                    if (sentMessage != null)
+                    {
+                        sqlManager.InsertToTable(context.Message.Id, sentMessage.Id);
+                    }
                 }
             }
         }
 
-        private bool isCommand(SocketUserMessage msg, ref int argPos)
+        private bool IsCommand(SocketUserMessage msg, ref int argPos)
         {
             return msg.HasStringPrefix(commandPrefix, ref argPos) || msg.HasMentionPrefix(discord.CurrentUser, ref argPos);
         }
 
-        private bool isEverybody()
+        private bool IsEverybody()
         {
             return editableBy == EVERYONE;
         }
 
-        private bool isModOnlyAndModMsg(GuildPermissions userPerms)
+        private bool IsModOnlyAndModMsg(GuildPermissions userPerms)
         {
             return editableBy == MOD_ONLY && (userPerms.ManageChannels || userPerms.Administrator);
         }
 
-        private bool isAdmOnlyAndAdmMsg(GuildPermissions userPerms)
+        private bool IsAdmOnlyAndAdmMsg(GuildPermissions userPerms)
         {
             return editableBy == ADMIN_ONLY && userPerms.Administrator;
         }
@@ -303,9 +349,9 @@ namespace TeBot
             return url.StartsWith(TWITTER_URL);
         }
 
-        private string FormatTwitterUrl(string twitterUrl, bool isCrosspost)
+        private string FormatTwitterUrl(string twitterUrl)
         {
-            return (isCrosspost ? FXTWITTER_URL : DFXTWITTER_URL) + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length);
+            return FXTWITTER_URL + RemoveTwitterTrackingInfo(twitterUrl).Substring(TWITTER_URL.Length);
         }
 
         private string RemoveTwitterTrackingInfo(string url)
@@ -314,9 +360,9 @@ namespace TeBot
             return trackingInfoIndex == -1 ? url : url.Substring(0, trackingInfoIndex);
         }
 
-        private string CreateDiscordUsername(SocketUser user)
+        private string CreateDiscordUserLink(SocketUser user)
         {
-            return user.Username + DISCORD_DISCRIMINATOR_SYMBOL + user.Discriminator;
+            return USER_LINK_0 + user.Id + USER_LINK_1;
         }
 
         /// <summary>
