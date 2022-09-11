@@ -26,7 +26,7 @@ namespace TeBot
 #if DEBUG
             string jsonPath = Path.Combine(DATA_LOCATION, @"stagingconfig.json");
 #else
-            Console.WriteLine("Looking for Json and DB in: " + dataLocation);
+            Console.WriteLine("Looking for Json and DB in: " + DATA_LOCATION);
             string jsonPath = Path.Combine(DATA_LOCATION, @"config.json");
 #endif
 
