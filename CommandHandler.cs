@@ -31,6 +31,7 @@ namespace TeBot
         private const string TWITTER_URL = "https://twitter.com/", FXTWITTER_URL = "https://fxtwitter.com/", HTTP = "http";
         private const string DISCORD_MESSAGE_LINK = "https://discord.com/channels/";
         private const char TWITTER_TRACKING_INFO_SYMBOL = '?', FORWARD_SLASH = '/';
+        private const string TENOR_URL = "tenor.com/view/";
 
         // Wait constants
         private const int CROSSPOST_WAIT_MS = 5000, FXTWITTER_WAIT_MS = 2000;
@@ -100,7 +101,10 @@ namespace TeBot
             else if (crosspostChannelsDictionary.TryGetValue(context.Channel.Id, out ulong channelToPostTo))
             {
                 bool couldHaveEmbed = context.Message.Content.Contains(HTTP);
-                if (couldHaveEmbed || context.Message.Attachments.Count > 0)
+                // check if link is tenor link -- suggests a reaction image. users 
+                // submitting gifs to the crosspost channel upload them directly / to discord, not tenor 
+                bool isTenorLink = context.Message.Content.Contains(TENOR_URL);
+                if (!isTenorLink && (couldHaveEmbed || context.Message.Attachments.Count > 0))
                 {
                     LinkImagesToOtherChannel(context, channelToPostTo, couldHaveEmbed);
                 }
